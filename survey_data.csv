@@ -1,0 +1,5 @@
+Student_ID,Study,Sleep,Social,Extra,Physical,GPA,Result
+Survey,5.0,9.0,2.0,2.0,1.0,3.0,Low
+AppFeedback,7.0,9.0,2.5,3.5,2.0,4.0,Moderate
+AppCorrection,5.0,9.5,2.0,1.0,1.0,3.0,High
+Correction,8.5,11.0,2.5,1.0,1.0,3.0,Moderate

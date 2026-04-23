@@ -66,17 +66,14 @@ if not st.session_state['logged_in']:
         st.subheader("Account Login")
         l_user = st.text_input("Student ID", placeholder="e.g., STU123456", key="login_u")
         l_pwd = st.text_input("Password", type="password", key="login_p")
-       if st.button("Sign In", use_container_width=True):
+        if st.button("Sign In", use_container_width=True):
             # Query Supabase Database
             res = supabase.table("users").select("*").eq("student_id", l_user).execute()
             if res.data and check_hashes(l_pwd, res.data[0]['password_hash']):
                 st.session_state['logged_in'] = True
                 st.session_state['username'] = l_user
                 st.session_state['user_role'] = res.data[0].get('role', 'Student')
-                
-                # ---> ADD THIS LINE HERE <---
                 st.session_state['messages'] = [] 
-                
                 st.success(f"Welcome back, {l_user}!")
                 time.sleep(1)
                 st.rerun()
@@ -97,12 +94,11 @@ if not st.session_state['logged_in']:
                         "role": "Student"
                     }).execute()
                     st.success("Registration successful! Please switch to the Login tab.")
-                except:
-                    st.error("Registration failed. This Student ID might already exist.")
+                except Exception as e:
+                    st.error(f"Registration failed. Error: {e}")
             else:
                 st.error("Student ID and Password cannot be empty.")
-    st.stop() # Halt execution if not logged in
-
+    st.stop()
 # ==========================================
 # 2. Main System Logic (Preserved entirely)
 # ==========================================

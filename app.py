@@ -26,14 +26,12 @@ except ImportError as e:
 # 0. Cloud Database & Authentication Setup
 # ==========================================
 
-# Password Hashing Functions
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
 def check_hashes(password, hashed_text):
     return make_hashes(password) == hashed_text
 
-# Securely read Supabase configuration from Secrets
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"]
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
@@ -42,7 +40,6 @@ except Exception as e:
     st.error("❌ Failed to connect to the Supabase Cloud Database. Please check your Streamlit Secrets configuration.")
     st.stop()
 
-# Initialize Session States
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'username' not in st.session_state:
@@ -53,21 +50,21 @@ if 'feedback_mode' not in st.session_state:
     st.session_state['feedback_mode'] = False
 
 # ==========================================
-# 1. Login & Registration Interface
+# 1. Login, Register & Forgot Password UI
 # ==========================================
 if not st.session_state['logged_in']:
     st.set_page_config(page_title="🔐 System Access", layout="centered")
     st.title("🎓 Student Wellness & Stress Advisor")
     st.markdown("---")
     
-    tab1, tab2 = st.tabs(["Login", "Register New Account"])
+    tab1, tab2, tab3 = st.tabs(["Login", "Register New Account", "Forgot Password"])
     
+    # --- LOGIN TAB ---
     with tab1:
         st.subheader("Account Login")
         l_user = st.text_input("Student ID", placeholder="e.g., STU123456", key="login_u")
         l_pwd = st.text_input("Password", type="password", key="login_p")
         if st.button("Sign In", use_container_width=True):
-            # Query Supabase Database
             res = supabase.table("users").select("*").eq("student_id", l_user).execute()
             if res.data and check_hashes(l_pwd, res.data[0]['password_hash']):
                 st.session_state['logged_in'] = True
@@ -80,35 +77,65 @@ if not st.session_state['logged_in']:
             else:
                 st.error("Invalid Student ID or Password. Please try again.")
     
+    # --- REGISTER TAB ---
     with tab2:
-        st.info("Note: Newly registered accounts default to the 'Student' role.")
+        st.info("Note: Please remember your Recovery Word. You will need it if you forget your password.")
         r_user = st.text_input("Set Student ID", placeholder="e.g., STU123456", key="reg_u")
         r_pwd = st.text_input("Set Password", type="password", key="reg_p")
+        r_rec = st.text_input("Set Recovery Word (e.g., your pet's name)", type="password", key="reg_rec")
+        
         if st.button("Register Now", use_container_width=True):
-            if r_user and r_pwd:
-                hashed = make_hashes(r_pwd)
+            if r_user and r_pwd and r_rec:
+                hashed_pwd = make_hashes(r_pwd)
+                hashed_rec = make_hashes(r_rec)
                 try:
                     supabase.table("users").insert({
                         "student_id": r_user, 
-                        "password_hash": hashed, 
+                        "password_hash": hashed_pwd, 
+                        "recovery_word_hash": hashed_rec,
                         "role": "Student"
                     }).execute()
                     st.success("Registration successful! Please switch to the Login tab.")
                 except Exception as e:
-                    st.error(f"Registration failed. Error: {e}")
+                    st.error(f"Registration failed. This Student ID might already exist.")
             else:
-                st.error("Student ID and Password cannot be empty.")
-    st.stop()
+                st.error("Please fill in all fields (ID, Password, and Recovery Word).")
+                
+    # --- FORGOT PASSWORD TAB ---
+    with tab3:
+        st.subheader("Recover Your Account")
+        st.write("Use your Security Recovery Word to set a new password.")
+        f_user = st.text_input("Your Student ID", key="f_u")
+        f_rec = st.text_input("Your Recovery Word", type="password", key="f_r")
+        f_new = st.text_input("Enter New Password", type="password", key="f_n")
+        
+        if st.button("Reset Password", use_container_width=True):
+            if f_user and f_rec and f_new:
+                res = supabase.table("users").select("*").eq("student_id", f_user).execute()
+                if res.data:
+                    # Check if recovery word exists and matches
+                    db_rec_hash = res.data[0].get('recovery_word_hash')
+                    if db_rec_hash and check_hashes(f_rec, db_rec_hash):
+                        new_pwd_hash = make_hashes(f_new)
+                        supabase.table("users").update({"password_hash": new_pwd_hash}).eq("student_id", f_user).execute()
+                        st.success("Password reset successfully! You can now log in.")
+                    else:
+                        st.error("Incorrect Recovery Word or no recovery word set for this account.")
+                else:
+                    st.error("Student ID not found.")
+            else:
+                st.error("Please fill in all fields.")
+                
+    st.stop() # Halt execution if not logged in
+
 # ==========================================
-# 2. Main System Logic (Preserved entirely)
+# 2. Main System Logic
 # ==========================================
 
-# --- DATABASE CONNECTION ---
 def get_db_connection():
     conn = sqlite3.connect('student_stress.db', check_same_thread=False)
     return conn
 
-# --- INTERNAL BRAIN (SQL Powered) ---
 @st.cache_resource
 def train_internal_model(force_retrain=False):
     if not os.path.exists('student_stress.db'):
@@ -134,9 +161,7 @@ def train_internal_model(force_retrain=False):
     if df.empty:
          return None, None, 0, 0, None, None
 
-    df['Lifestyle_Score'] = (df['Social_Hours_Per_Day'] + 
-                             df['Physical_Activity_Hours_Per_Day'] + 
-                             df['Extracurricular_Hours_Per_Day'])
+    df['Lifestyle_Score'] = (df['Social_Hours_Per_Day'] + df['Physical_Activity_Hours_Per_Day'] + df['Extracurricular_Hours_Per_Day'])
     df['Academic_Pressure'] = df['GPA'] * df['Study_Hours_Per_Day']
 
     features = ['Study_Hours_Per_Day', 'Sleep_Hours_Per_Day', 'Lifestyle_Score', 'Academic_Pressure', 'GPA']
@@ -166,23 +191,19 @@ model, le, train_acc, test_acc, model_cm, feature_names = train_internal_model()
 # --- UI CONFIGURATION ---
 st.set_page_config(page_title="Gemini AI Counselor", layout="wide")
 
-# Sidebar Welcome & Logout
 st.sidebar.markdown(f"### 👋 Welcome, {st.session_state['username']}")
 st.sidebar.write(f"Current Role: `{st.session_state['user_role']}`")
 if st.sidebar.button("🚪 Logout"):
     st.session_state['logged_in'] = False
-    
-    # ---> ADD THESE TWO LINES HERE <---
     st.session_state['username'] = ""
     st.session_state['messages'] = []
-    
     st.rerun()
 
 st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3062/3062331.png", width=100)
 st.sidebar.title("Navigation")
 
-# Role-Based Access Control (Admin sees Analysis and Dashboard)
-menu_options = ["🏠 Home", "🤖 AI Predictor", "💬 AI Chatbot", "📝 User Survey"]
+# Added "Account Settings" to the menu
+menu_options = ["🏠 Home", "🤖 AI Predictor", "💬 AI Chatbot", "📝 User Survey", "⚙️ Account Settings"]
 if st.session_state['user_role'] == "Admin":
     menu_options += ["📈 Data Analysis", "📊 Dashboard"]
 
@@ -209,7 +230,6 @@ else:
 # 4. PAGE LOGIC
 # ==========================================
 
-# --- PAGE: HOME ---
 if page == "🏠 Home":
     st.title("🧠 AI Student Stress Counselor")
     st.markdown("""
@@ -225,7 +245,6 @@ if page == "🏠 Home":
         col1.info(f"🎓 Training Accuracy: {train_acc*100:.1f}% (Learning Ability)")
         col2.success(f"🧪 Testing Accuracy: {test_acc*100:.1f}% (Real-world Performance)")
 
-# --- PAGE: PREDICTOR ---
 elif page == "🤖 AI Predictor":
     st.title("🤖 AI Stress Assessment")
     c1, c2 = st.columns([1, 1])
@@ -332,7 +351,6 @@ Keep the tone supportive, professional, and concise.
                         conn.commit(); conn.close()
                         st.success("Correction Saved!"); st.session_state['feedback_mode'] = False; st.rerun()
 
-# --- PAGE: CHATBOT ---
 elif page == "💬 AI Chatbot":
     st.title("💬 Gemini Student Counselor")
     if not gemini_model:
@@ -352,7 +370,6 @@ elif page == "💬 AI Chatbot":
                 message_placeholder.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
 
-# --- PAGE: SURVEY ---
 elif page == "📝 User Survey":
     st.title("📝 Student Lifestyle Survey")
     with st.form("survey_form"):
@@ -371,7 +388,32 @@ elif page == "📝 User Survey":
                 cur.execute("INSERT INTO user_feedback (Study_Hours_Per_Day, Sleep_Hours_Per_Day, Social_Hours_Per_Day, Physical_Activity_Hours_Per_Day, Extracurricular_Hours_Per_Day, GPA, Stress_Level) VALUES (?, ?, ?, ?, ?, ?, ?)", (s_study, s_sleep, s_social, s_phys, s_extra, s_gpa, s_stress))
                 conn.commit(); conn.close(); st.success("Data added.")
 
-# --- PAGE: DATA ANALYSIS ---
+# --- NEW PAGE: ACCOUNT SETTINGS ---
+elif page == "⚙️ Account Settings":
+    st.title("⚙️ Account Settings")
+    st.write("Manage your security credentials below.")
+    
+    with st.form("change_password_form"):
+        st.subheader("Change Password")
+        old_pwd = st.text_input("Current Password", type="password")
+        new_pwd = st.text_input("New Password", type="password")
+        confirm_pwd = st.text_input("Confirm New Password", type="password")
+        
+        if st.form_submit_button("Update Password"):
+            if new_pwd != confirm_pwd:
+                st.error("New passwords do not match!")
+            elif old_pwd and new_pwd:
+                # Fetch current user's password hash from database
+                res = supabase.table("users").select("password_hash").eq("student_id", st.session_state['username']).execute()
+                if res.data and check_hashes(old_pwd, res.data[0]['password_hash']):
+                    # Update with new hashed password
+                    supabase.table("users").update({"password_hash": make_hashes(new_pwd)}).eq("student_id", st.session_state['username']).execute()
+                    st.success("Password updated successfully!")
+                else:
+                    st.error("Incorrect current password.")
+            else:
+                st.error("Please fill in all fields.")
+
 elif page == "📈 Data Analysis":
     st.title("📈 Model Transparency")
     t1, t2, t3 = st.tabs(["Dataset", "Feature Importance", "Performance"])
@@ -391,7 +433,6 @@ elif page == "📈 Data Analysis":
         if test_acc: st.metric("Model Accuracy", f"{test_acc*100:.2f}%")
         if model_cm is not None: st.plotly_chart(px.imshow(model_cm, text_auto=True, x=le.classes_, y=le.classes_, color_continuous_scale='Blues'))
 
-# --- PAGE: DASHBOARD ---
 elif page == "📊 Dashboard":
     st.title("Admin Dashboard & System Testing")
     conn = get_db_connection()

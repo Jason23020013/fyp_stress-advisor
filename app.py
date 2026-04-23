@@ -66,13 +66,17 @@ if not st.session_state['logged_in']:
         st.subheader("Account Login")
         l_user = st.text_input("Student ID", placeholder="e.g., STU123456", key="login_u")
         l_pwd = st.text_input("Password", type="password", key="login_p")
-        if st.button("Sign In", use_container_width=True):
+       if st.button("Sign In", use_container_width=True):
             # Query Supabase Database
             res = supabase.table("users").select("*").eq("student_id", l_user).execute()
             if res.data and check_hashes(l_pwd, res.data[0]['password_hash']):
                 st.session_state['logged_in'] = True
                 st.session_state['username'] = l_user
                 st.session_state['user_role'] = res.data[0].get('role', 'Student')
+                
+                # ---> ADD THIS LINE HERE <---
+                st.session_state['messages'] = [] 
+                
                 st.success(f"Welcome back, {l_user}!")
                 time.sleep(1)
                 st.rerun()
@@ -171,6 +175,11 @@ st.sidebar.markdown(f"### 👋 Welcome, {st.session_state['username']}")
 st.sidebar.write(f"Current Role: `{st.session_state['user_role']}`")
 if st.sidebar.button("🚪 Logout"):
     st.session_state['logged_in'] = False
+    
+    # ---> ADD THESE TWO LINES HERE <---
+    st.session_state['username'] = ""
+    st.session_state['messages'] = []
+    
     st.rerun()
 
 st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3062/3062331.png", width=100)

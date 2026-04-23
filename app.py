@@ -7,42 +7,42 @@ import os
 import joblib
 import time
 import sqlite3
-import hashlib  # 用于密码加密
+import hashlib
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix
 
-# --- 1. 核心库导入与环境检查 ---
+# --- 1. Core Library Imports & Checks ---
 try:
     from supabase import create_client, Client
     import google.generativeai as genai
     from imblearn.over_sampling import SMOTE
 except ImportError as e:
-    st.error(f"🚨 缺少必要的库: {e}. 请确保 requirements.txt 包含 supabase, google-generativeai, imbalanced-learn")
+    st.error(f"🚨 Missing required libraries: {e}. Please ensure your requirements.txt includes supabase, google-generativeai, and imbalanced-learn.")
     st.stop()
 
 # ==========================================
-# 0. 权限与云端数据库配置 (新增)
+# 0. Cloud Database & Authentication Setup
 # ==========================================
 
-# 密码哈希处理函数
+# Password Hashing Functions
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
 def check_hashes(password, hashed_text):
     return make_hashes(password) == hashed_text
 
-# 从 Secrets 安全读取 Supabase 配置
+# Securely read Supabase configuration from Secrets
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"]
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
-    st.error("❌ 无法连接到 Supabase 云端数据库，请检查 Streamlit Secrets 配置。")
+    st.error("❌ Failed to connect to the Supabase Cloud Database. Please check your Streamlit Secrets configuration.")
     st.stop()
 
-# 初始化登录状态
+# Initialize Session States
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'username' not in st.session_state:
@@ -53,36 +53,37 @@ if 'feedback_mode' not in st.session_state:
     st.session_state['feedback_mode'] = False
 
 # ==========================================
-# 1. 登录与注册拦截界面 (新增)
+# 1. Login & Registration Interface
 # ==========================================
 if not st.session_state['logged_in']:
-    st.set_page_config(page_title="🔐 UTS Stress System Login", layout="centered")
-    st.title("🎓 UTS 学生压力顾问系统")
+    st.set_page_config(page_title="🔐 System Access", layout="centered")
+    st.title("🎓 Student Wellness & Stress Advisor")
     st.markdown("---")
     
-    tab1, tab2 = st.tabs(["用户登录 (Login)", "新用户注册 (Register)"])
+    tab1, tab2 = st.tabs(["Login", "Register New Account"])
     
     with tab1:
-        l_user = st.text_input("学号 (Student ID)", placeholder="例如: BCS23020013", key="login_u")
-        l_pwd = st.text_input("密码 (Password)", type="password", key="login_p")
-        if st.button("立即登录", use_container_width=True):
-            # 查询云端数据库
+        st.subheader("Account Login")
+        l_user = st.text_input("Student ID", placeholder="e.g., STU123456", key="login_u")
+        l_pwd = st.text_input("Password", type="password", key="login_p")
+        if st.button("Sign In", use_container_width=True):
+            # Query Supabase Database
             res = supabase.table("users").select("*").eq("student_id", l_user).execute()
             if res.data and check_hashes(l_pwd, res.data[0]['password_hash']):
                 st.session_state['logged_in'] = True
                 st.session_state['username'] = l_user
                 st.session_state['user_role'] = res.data[0].get('role', 'Student')
-                st.success(f"欢迎回来, {l_user}!")
+                st.success(f"Welcome back, {l_user}!")
                 time.sleep(1)
                 st.rerun()
             else:
-                st.error("学号或密码错误，请重试。")
+                st.error("Invalid Student ID or Password. Please try again.")
     
     with tab2:
-        st.info("提示：注册后的默认身份为 Student。")
-        r_user = st.text_input("设置学号 (Username)", placeholder="建议使用学号", key="reg_u")
-        r_pwd = st.text_input("设置密码 (Password)", type="password", key="reg_p")
-        if st.button("完成注册", use_container_width=True):
+        st.info("Note: Newly registered accounts default to the 'Student' role.")
+        r_user = st.text_input("Set Student ID", placeholder="e.g., STU123456", key="reg_u")
+        r_pwd = st.text_input("Set Password", type="password", key="reg_p")
+        if st.button("Register Now", use_container_width=True):
             if r_user and r_pwd:
                 hashed = make_hashes(r_pwd)
                 try:
@@ -91,15 +92,15 @@ if not st.session_state['logged_in']:
                         "password_hash": hashed, 
                         "role": "Student"
                     }).execute()
-                    st.success("注册成功！现在请切换到‘登录’标签。")
+                    st.success("Registration successful! Please switch to the Login tab.")
                 except:
-                    st.error("注册失败：该学号可能已被注册。")
+                    st.error("Registration failed. This Student ID might already exist.")
             else:
-                st.error("学号和密码不能为空。")
-    st.stop() # 未登录则停止运行后续代码
+                st.error("Student ID and Password cannot be empty.")
+    st.stop() # Halt execution if not logged in
 
 # ==========================================
-# 2. 以下为您原本的所有代码逻辑 (完全保留)
+# 2. Main System Logic (Preserved entirely)
 # ==========================================
 
 # --- DATABASE CONNECTION ---
@@ -165,39 +166,39 @@ model, le, train_acc, test_acc, model_cm, feature_names = train_internal_model()
 # --- UI CONFIGURATION ---
 st.set_page_config(page_title="Gemini AI Counselor", layout="wide")
 
-# 侧边栏登出与欢迎词
-st.sidebar.markdown(f"### 👋 欢迎, {st.session_state['username']}")
-st.sidebar.write(f"当前身份: `{st.session_state['user_role']}`")
-if st.sidebar.button("🚪 退出登录"):
+# Sidebar Welcome & Logout
+st.sidebar.markdown(f"### 👋 Welcome, {st.session_state['username']}")
+st.sidebar.write(f"Current Role: `{st.session_state['user_role']}`")
+if st.sidebar.button("🚪 Logout"):
     st.session_state['logged_in'] = False
     st.rerun()
 
 st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3062/3062331.png", width=100)
-st.sidebar.title("功能导航")
+st.sidebar.title("Navigation")
 
-# 侧边栏菜单权限控制 (Admin 可见 Analysis 和 Dashboard)
+# Role-Based Access Control (Admin sees Analysis and Dashboard)
 menu_options = ["🏠 Home", "🤖 AI Predictor", "💬 AI Chatbot", "📝 User Survey"]
 if st.session_state['user_role'] == "Admin":
     menu_options += ["📈 Data Analysis", "📊 Dashboard"]
 
-page = st.sidebar.radio("前往页面", menu_options)
+page = st.sidebar.radio("Go to", menu_options)
 
 # --- API KEY SETUP ---
 st.sidebar.markdown("---")
-st.sidebar.header("🔑 AI 连接状态")
+st.sidebar.header("🔑 AI Connection Status")
 api_key = st.secrets["GEMINI_API_KEY"]
 
 if api_key == "" or "PASTE_YOUR_KEY" in api_key:
     gemini_model = None
-    st.sidebar.error("🔴 未发现 API Key")
+    st.sidebar.error("🔴 No API Key Found")
 else:
     try:
         genai.configure(api_key=api_key)
         gemini_model = genai.GenerativeModel('gemini-2.5-flash') 
-        st.sidebar.success("🟢 AI 已连接 (Gemini 2.5)")
+        st.sidebar.success("🟢 AI Connected (Gemini 2.5)")
     except Exception as e:
         gemini_model = None
-        st.sidebar.error(f"🔴 连接错误: {e}")
+        st.sidebar.error(f"🔴 Connection Error: {e}")
 
 # ==========================================
 # 4. PAGE LOGIC

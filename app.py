@@ -48,6 +48,8 @@ if 'user_role' not in st.session_state:
     st.session_state['user_role'] = "Guest"
 if 'feedback_mode' not in st.session_state:
     st.session_state['feedback_mode'] = False
+if 'chat_loaded' not in st.session_state:
+    st.session_state['chat_loaded'] = False
 
 # ==========================================
 # 1. Login, Register, Forgot Password & GUEST
@@ -71,6 +73,7 @@ if not st.session_state['logged_in']:
                 st.session_state['username'] = l_user
                 st.session_state['user_role'] = res.data[0].get('role', 'Student')
                 st.session_state['messages'] = [] 
+                st.session_state['chat_loaded'] = False # Reset chat loader
                 st.success(f"Welcome back, {l_user}!")
                 time.sleep(1)
                 st.rerun()
@@ -133,6 +136,7 @@ if not st.session_state['logged_in']:
         st.session_state['username'] = "Guest User"
         st.session_state['user_role'] = "Guest"
         st.session_state['messages'] = [] 
+        st.session_state['chat_loaded'] = False
         st.rerun()
                 
     st.stop() # Halt execution if not logged in
@@ -145,7 +149,7 @@ def get_db_connection():
     conn = sqlite3.connect('student_stress.db', check_same_thread=False)
     return conn
 
-# Automatically upgrade local SQLite DB to separate History from Training Feedback
+# Automatically upgrade local SQLite DB
 def upgrade_local_db():
     conn = get_db_connection()
     cur = conn.cursor()
@@ -158,7 +162,6 @@ def upgrade_local_db():
     except:
         pass 
     
-    # NEW: Create a dedicated table JUST for personal history (not for training)
     cur.execute('''
         CREATE TABLE IF NOT EXISTS user_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -173,6 +176,17 @@ def upgrade_local_db():
             Timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+
+    # NEW: Create a table for Chatbot History
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS user_chat_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id TEXT,
+            role TEXT,
+            content TEXT,
+            Timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -184,7 +198,6 @@ def train_internal_model(force_retrain=False):
         return None, None, 0, 0, None, None
 
     conn = get_db_connection()
-    # ML Model ONLY trains on Verified Feedback, NEVER from the auto-saved history
     query = """
     SELECT * FROM training_data
     UNION ALL
@@ -241,6 +254,7 @@ if st.sidebar.button("🚪 Logout"):
     st.session_state['logged_in'] = False
     st.session_state['username'] = ""
     st.session_state['messages'] = []
+    st.session_state['chat_loaded'] = False
     st.rerun()
 
 st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3062/3062331.png", width=100)
@@ -331,7 +345,6 @@ elif page == "🤖 AI Predictor":
                     confidence = np.max(pred_proba) * 100
                     pred_label = le.inverse_transform([pred_idx])[0]
                     
-                    # --- AUTO-SAVE TO PERSONAL HISTORY (No click required) ---
                     if st.session_state['user_role'] != "Guest":
                         conn = get_db_connection()
                         cur = conn.cursor()
@@ -395,7 +408,6 @@ Keep the tone supportive, professional, and concise.
                 st.caption("Confirming helps train our AI to be more accurate for future students!")
                 
                 cy, cn = st.columns(2)
-                # VERIFIED FEEDBACK ONLY (Used for Retraining)
                 if cy.button("✅ Yes, This is Accurate"):
                     conn = get_db_connection()
                     cur = conn.cursor()
@@ -417,27 +429,69 @@ Keep the tone supportive, professional, and concise.
                             st.success("Correction saved for AI retraining!"); st.session_state['feedback_mode'] = False; st.rerun()
 
 elif page == "💬 AI Chatbot":
-    st.title("💬 Gemini Student Counselor")
+    # Layout for Title and the Clear Chat Button
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.title("💬 Gemini Student Counselor")
+    with col2:
+        if st.session_state['user_role'] != "Guest":
+            if st.button("🗑️ Clear Chat"):
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute("DELETE FROM user_chat_history WHERE student_id = ?", (st.session_state['username'],))
+                conn.commit()
+                conn.close()
+                st.session_state.messages = []
+                st.session_state['chat_loaded'] = True 
+                st.rerun()
     
     if st.session_state['user_role'] == "Guest":
          st.info("👋 You are chatting as a Guest. Your chat history will not be saved after you log out.")
+         if "messages" not in st.session_state:
+             st.session_state.messages = []
+    else:
+        # Load user history from Database if not loaded yet
+        if not st.session_state.get('chat_loaded', False):
+            conn = get_db_connection()
+            hist_df = pd.read_sql_query("SELECT role, content FROM user_chat_history WHERE student_id = ? ORDER BY Timestamp ASC", conn, params=(st.session_state['username'],))
+            conn.close()
+            st.session_state.messages = [{"role": row['role'], "content": row['content']} for _, row in hist_df.iterrows()]
+            st.session_state['chat_loaded'] = True
          
     if not gemini_model:
         st.warning("⚠️ Gemini is disconnected.")
     else:
-        if "messages" not in st.session_state: st.session_state.messages = []
+        # Display Chat History
         for message in st.session_state.messages:
-            with st.chat_message(message["role"]): st.markdown(message["content"])
+            with st.chat_message(message["role"]): 
+                st.markdown(message["content"])
+                
+        # Chat Input
         if prompt := st.chat_input("How are you feeling today?"):
+            # 1. Add User Message to UI & DB
             st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"): st.markdown(prompt)
+            if st.session_state['user_role'] != "Guest":
+                conn = get_db_connection(); cur = conn.cursor()
+                cur.execute("INSERT INTO user_chat_history (student_id, role, content) VALUES (?, ?, ?)", (st.session_state['username'], "user", prompt))
+                conn.commit(); conn.close()
+                
+            with st.chat_message("user"): 
+                st.markdown(prompt)
+                
+            # 2. Get AI Response
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
                 history_text = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages])
                 system_prompt = "You are an empathetic AI Student Counselor. Support the student warmly and concisely."
                 response = gemini_model.generate_content(system_prompt + history_text)
                 message_placeholder.markdown(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
+                
+            # 3. Add AI Response to UI & DB
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            if st.session_state['user_role'] != "Guest":
+                conn = get_db_connection(); cur = conn.cursor()
+                cur.execute("INSERT INTO user_chat_history (student_id, role, content) VALUES (?, ?, ?)", (st.session_state['username'], "assistant", response.text))
+                conn.commit(); conn.close()
 
 elif page == "📜 My History":
     st.title("📜 My Prediction History")
@@ -445,7 +499,6 @@ elif page == "📜 My History":
     
     conn = get_db_connection()
     try:
-        # Fetching strictly from user_history (The auto-save table)
         history_df = pd.read_sql_query(
             "SELECT Timestamp, Study_Hours_Per_Day, Sleep_Hours_Per_Day, GPA, Stress_Level FROM user_history WHERE student_id = ? ORDER BY Timestamp DESC", 
             conn, 
@@ -484,7 +537,6 @@ elif page == "📝 User Survey":
                 st.error("Error: > 24 Hours")
             else:
                 conn = get_db_connection(); cur = conn.cursor()
-                # Survey is explicit feedback, so we save it to both History and Feedback tables
                 cur.execute("INSERT INTO user_history (Study_Hours_Per_Day, Sleep_Hours_Per_Day, Social_Hours_Per_Day, Physical_Activity_Hours_Per_Day, Extracurricular_Hours_Per_Day, GPA, Stress_Level, student_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (s_study, s_sleep, s_social, s_phys, s_extra, s_gpa, s_stress, st.session_state['username']))
                 cur.execute("INSERT INTO user_feedback (Study_Hours_Per_Day, Sleep_Hours_Per_Day, Social_Hours_Per_Day, Physical_Activity_Hours_Per_Day, Extracurricular_Hours_Per_Day, GPA, Stress_Level, student_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (s_study, s_sleep, s_social, s_phys, s_extra, s_gpa, s_stress, st.session_state['username']))
                 conn.commit(); conn.close(); st.success("Survey data added to your history and training database!")

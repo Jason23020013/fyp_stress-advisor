@@ -45,12 +45,12 @@ if 'logged_in' not in st.session_state:
 if 'username' not in st.session_state:
     st.session_state['username'] = ""
 if 'user_role' not in st.session_state:
-    st.session_state['user_role'] = "Student"
+    st.session_state['user_role'] = "Guest"
 if 'feedback_mode' not in st.session_state:
     st.session_state['feedback_mode'] = False
 
 # ==========================================
-# 1. Login, Register & Forgot Password UI
+# 1. Login, Register, Forgot Password & GUEST
 # ==========================================
 if not st.session_state['logged_in']:
     st.set_page_config(page_title="🔐 System Access", layout="centered")
@@ -113,7 +113,6 @@ if not st.session_state['logged_in']:
             if f_user and f_rec and f_new:
                 res = supabase.table("users").select("*").eq("student_id", f_user).execute()
                 if res.data:
-                    # Check if recovery word exists and matches
                     db_rec_hash = res.data[0].get('recovery_word_hash')
                     if db_rec_hash and check_hashes(f_rec, db_rec_hash):
                         new_pwd_hash = make_hashes(f_new)
@@ -125,6 +124,16 @@ if not st.session_state['logged_in']:
                     st.error("Student ID not found.")
             else:
                 st.error("Please fill in all fields.")
+    
+    # --- GUEST MODE ---
+    st.markdown("---")
+    st.subheader("Or explore the system directly")
+    if st.button("🚀 Continue as Guest", use_container_width=True):
+        st.session_state['logged_in'] = True
+        st.session_state['username'] = "Guest User"
+        st.session_state['user_role'] = "Guest"
+        st.session_state['messages'] = [] 
+        st.rerun()
                 
     st.stop() # Halt execution if not logged in
 
@@ -202,8 +211,14 @@ if st.sidebar.button("🚪 Logout"):
 st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3062/3062331.png", width=100)
 st.sidebar.title("Navigation")
 
-# Added "Account Settings" to the menu
-menu_options = ["🏠 Home", "🤖 AI Predictor", "💬 AI Chatbot", "📝 User Survey", "⚙️ Account Settings"]
+# DYNAMIC NAVIGATION BASED ON ROLE
+menu_options = ["🏠 Home", "🤖 AI Predictor", "💬 AI Chatbot"]
+
+# Students and Admins get Survey and Settings (Guests do not)
+if st.session_state['user_role'] in ["Student", "Admin"]:
+    menu_options += ["📝 User Survey", "⚙️ Account Settings"]
+
+# Only Admins get Analysis and Dashboard
 if st.session_state['user_role'] == "Admin":
     menu_options += ["📈 Data Analysis", "📊 Dashboard"]
 
@@ -330,29 +345,38 @@ Keep the tone supportive, professional, and concise.
             st.success(p['advice'])
             
             st.markdown("---")
-            st.write("Is this result correct?")
-            cy, cn = st.columns(2)
-            if cy.button("✅ Yes, Correct"):
-                conn = get_db_connection()
-                cur = conn.cursor()
-                cur.execute("INSERT INTO user_feedback (Study_Hours_Per_Day, Sleep_Hours_Per_Day, Social_Hours_Per_Day, Physical_Activity_Hours_Per_Day, Extracurricular_Hours_Per_Day, GPA, Stress_Level) VALUES (?, ?, ?, ?, ?, ?, ?)", p['inputs'])
-                conn.commit(); conn.close()
-                st.success("Feedback saved!")
-            if cn.button("❌ No, It's Wrong"):
-                st.session_state['feedback_mode'] = True
+            
+            # GUEST RESTRICTION: Do not allow guests to alter the database
+            if st.session_state['user_role'] == "Guest":
+                st.info("🔒 Please log in or register an account to submit model feedback and help improve our AI.")
+            else:
+                st.write("Is this result correct?")
+                cy, cn = st.columns(2)
+                if cy.button("✅ Yes, Correct"):
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute("INSERT INTO user_feedback (Study_Hours_Per_Day, Sleep_Hours_Per_Day, Social_Hours_Per_Day, Physical_Activity_Hours_Per_Day, Extracurricular_Hours_Per_Day, GPA, Stress_Level) VALUES (?, ?, ?, ?, ?, ?, ?)", p['inputs'])
+                    conn.commit(); conn.close()
+                    st.success("Feedback saved!")
+                if cn.button("❌ No, It's Wrong"):
+                    st.session_state['feedback_mode'] = True
 
-            if st.session_state.get('feedback_mode', False):
-                with st.form("correction_form"):
-                    correct_label = st.selectbox("Correct Stress Level", ["Low", "Moderate", "High"])
-                    if st.form_submit_button("Submit Correction"):
-                        conn = get_db_connection(); cur = conn.cursor()
-                        inputs = list(p['inputs']); inputs[-1] = correct_label 
-                        cur.execute("INSERT INTO user_feedback (Study_Hours_Per_Day, Sleep_Hours_Per_Day, Social_Hours_Per_Day, Physical_Activity_Hours_Per_Day, Extracurricular_Hours_Per_Day, GPA, Stress_Level) VALUES (?, ?, ?, ?, ?, ?, ?)", tuple(inputs))
-                        conn.commit(); conn.close()
-                        st.success("Correction Saved!"); st.session_state['feedback_mode'] = False; st.rerun()
+                if st.session_state.get('feedback_mode', False):
+                    with st.form("correction_form"):
+                        correct_label = st.selectbox("Correct Stress Level", ["Low", "Moderate", "High"])
+                        if st.form_submit_button("Submit Correction"):
+                            conn = get_db_connection(); cur = conn.cursor()
+                            inputs = list(p['inputs']); inputs[-1] = correct_label 
+                            cur.execute("INSERT INTO user_feedback (Study_Hours_Per_Day, Sleep_Hours_Per_Day, Social_Hours_Per_Day, Physical_Activity_Hours_Per_Day, Extracurricular_Hours_Per_Day, GPA, Stress_Level) VALUES (?, ?, ?, ?, ?, ?, ?)", tuple(inputs))
+                            conn.commit(); conn.close()
+                            st.success("Correction Saved!"); st.session_state['feedback_mode'] = False; st.rerun()
 
 elif page == "💬 AI Chatbot":
     st.title("💬 Gemini Student Counselor")
+    
+    if st.session_state['user_role'] == "Guest":
+         st.info("👋 You are chatting as a Guest. Your chat history will not be saved after you log out.")
+         
     if not gemini_model:
         st.warning("⚠️ Gemini is disconnected.")
     else:
@@ -388,7 +412,6 @@ elif page == "📝 User Survey":
                 cur.execute("INSERT INTO user_feedback (Study_Hours_Per_Day, Sleep_Hours_Per_Day, Social_Hours_Per_Day, Physical_Activity_Hours_Per_Day, Extracurricular_Hours_Per_Day, GPA, Stress_Level) VALUES (?, ?, ?, ?, ?, ?, ?)", (s_study, s_sleep, s_social, s_phys, s_extra, s_gpa, s_stress))
                 conn.commit(); conn.close(); st.success("Data added.")
 
-# --- NEW PAGE: ACCOUNT SETTINGS ---
 elif page == "⚙️ Account Settings":
     st.title("⚙️ Account Settings")
     st.write("Manage your security credentials below.")
@@ -403,10 +426,8 @@ elif page == "⚙️ Account Settings":
             if new_pwd != confirm_pwd:
                 st.error("New passwords do not match!")
             elif old_pwd and new_pwd:
-                # Fetch current user's password hash from database
                 res = supabase.table("users").select("password_hash").eq("student_id", st.session_state['username']).execute()
                 if res.data and check_hashes(old_pwd, res.data[0]['password_hash']):
-                    # Update with new hashed password
                     supabase.table("users").update({"password_hash": make_hashes(new_pwd)}).eq("student_id", st.session_state['username']).execute()
                     st.success("Password updated successfully!")
                 else:

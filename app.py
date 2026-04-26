@@ -73,6 +73,7 @@ if not st.session_state['logged_in']:
                 st.session_state['user_role'] = res.data[0].get('role', 'Student')
                 st.session_state['messages'] = [] 
                 st.session_state['chat_loaded'] = False
+                st.session_state.pop('last_pred', None) 
                 st.success(f"Welcome back, {l_user}!")
                 time.sleep(1)
                 st.rerun()
@@ -98,7 +99,7 @@ if not st.session_state['logged_in']:
                     }).execute()
                     st.success("Registration successful! Please switch to the Login tab.")
                 except Exception as e:
-                    st.error(f"Registration failed. This Student ID might already exist.")
+                    st.error("Registration failed. This Student ID might already exist.")
             else:
                 st.error("Please fill in all fields (ID, Password, and Recovery Word).")
                 
@@ -133,6 +134,7 @@ if not st.session_state['logged_in']:
         st.session_state['user_role'] = "Guest"
         st.session_state['messages'] = [] 
         st.session_state['chat_loaded'] = False
+        st.session_state.pop('last_pred', None) 
         st.rerun()
                 
     st.stop()
@@ -205,6 +207,7 @@ if st.sidebar.button("🚪 Logout"):
     st.session_state['username'] = ""
     st.session_state['messages'] = []
     st.session_state['chat_loaded'] = False
+    st.session_state.pop('last_pred', None) 
     st.rerun()
 
 st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3062/3062331.png", width=100)
@@ -441,7 +444,6 @@ elif page == "📜 My History":
             st.info("You don't have any saved records yet. Go to the 'AI Predictor' tab to take your first assessment!")
         else:
             history_df = pd.DataFrame(res.data)
-            # Format the timestamp properly
             history_df['created_at'] = pd.to_datetime(history_df['created_at']).dt.strftime('%Y-%m-%d %H:%M')
             history_df.rename(columns={
                 'created_at': 'Date & Time',
@@ -505,6 +507,14 @@ elif page == "📈 Data Analysis":
     t1, t2, t3 = st.tabs(["Dataset", "Feature Importance", "Performance"])
     with t1:
         st.info("Because the data is now fully integrated into the cloud, this preview relies on live model training arrays.")
+        try:
+            conn = sqlite3.connect('student_stress.db', check_same_thread=False)
+            df_display = pd.read_sql("SELECT * FROM training_data LIMIT 100", conn)
+            fig = px.box(df_display, x="Stress_Level", y="Sleep_Hours_Per_Day", color="Stress_Level")
+            st.plotly_chart(fig)
+            conn.close()
+        except:
+            st.write("No local preview data found.")
     with t2:
         if model:
             imp = pd.DataFrame({'Feature': feature_names, 'Importance': model.feature_importances_}).sort_values('Importance', ascending=True)

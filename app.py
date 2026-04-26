@@ -145,6 +145,23 @@ def get_db_connection():
     conn = sqlite3.connect('student_stress.db', check_same_thread=False)
     return conn
 
+# Automatically upgrade local SQLite DB to support User History Tracking
+def upgrade_local_db():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("ALTER TABLE user_feedback ADD COLUMN student_id TEXT")
+    except:
+        pass # Column already exists
+    try:
+        cur.execute("ALTER TABLE user_feedback ADD COLUMN timestamp DATETIME DEFAULT CURRENT_TIMESTAMP")
+    except:
+        pass # Column already exists
+    conn.commit()
+    conn.close()
+
+upgrade_local_db()
+
 @st.cache_resource
 def train_internal_model(force_retrain=False):
     if not os.path.exists('student_stress.db'):
@@ -214,9 +231,9 @@ st.sidebar.title("Navigation")
 # DYNAMIC NAVIGATION BASED ON ROLE
 menu_options = ["🏠 Home", "🤖 AI Predictor", "💬 AI Chatbot"]
 
-# Students and Admins get Survey and Settings (Guests do not)
+# Students and Admins get History, Survey, and Settings (Guests do not)
 if st.session_state['user_role'] in ["Student", "Admin"]:
-    menu_options += ["📝 User Survey", "⚙️ Account Settings"]
+    menu_options += ["📜 My History", "📝 User Survey", "⚙️ Account Settings"]
 
 # Only Admins get Analysis and Dashboard
 if st.session_state['user_role'] == "Admin":
@@ -253,6 +270,7 @@ if page == "🏠 Home":
     **Features:**
     - **🤖 Predictive AI:** Uses Random Forest to calculate stress risk.
     - **💬 Generative AI:** A chatbot counselor powered by **Google Gemini**.
+    - **📜 User History:** Securely tracks your past stress levels and improvements over time.
     - **🔄 Continuous Learning:** The system gets smarter with your feedback.
     """)
     if test_acc:
@@ -348,28 +366,29 @@ Keep the tone supportive, professional, and concise.
             
             # GUEST RESTRICTION: Do not allow guests to alter the database
             if st.session_state['user_role'] == "Guest":
-                st.info("🔒 Please log in or register an account to submit model feedback and help improve our AI.")
+                st.info("🔒 Please log in or register an account to save your history and improve our AI.")
             else:
                 st.write("Is this result correct?")
                 cy, cn = st.columns(2)
-                if cy.button("✅ Yes, Correct"):
+                if cy.button("✅ Yes, Save to History"):
                     conn = get_db_connection()
                     cur = conn.cursor()
-                    cur.execute("INSERT INTO user_feedback (Study_Hours_Per_Day, Sleep_Hours_Per_Day, Social_Hours_Per_Day, Physical_Activity_Hours_Per_Day, Extracurricular_Hours_Per_Day, GPA, Stress_Level) VALUES (?, ?, ?, ?, ?, ?, ?)", p['inputs'])
+                    # Included st.session_state['username'] so it saves specifically to their account
+                    cur.execute("INSERT INTO user_feedback (Study_Hours_Per_Day, Sleep_Hours_Per_Day, Social_Hours_Per_Day, Physical_Activity_Hours_Per_Day, Extracurricular_Hours_Per_Day, GPA, Stress_Level, student_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (*p['inputs'], st.session_state['username']))
                     conn.commit(); conn.close()
-                    st.success("Feedback saved!")
+                    st.success("Feedback saved to your history!")
                 if cn.button("❌ No, It's Wrong"):
                     st.session_state['feedback_mode'] = True
 
                 if st.session_state.get('feedback_mode', False):
                     with st.form("correction_form"):
                         correct_label = st.selectbox("Correct Stress Level", ["Low", "Moderate", "High"])
-                        if st.form_submit_button("Submit Correction"):
+                        if st.form_submit_button("Save Correction to History"):
                             conn = get_db_connection(); cur = conn.cursor()
                             inputs = list(p['inputs']); inputs[-1] = correct_label 
-                            cur.execute("INSERT INTO user_feedback (Study_Hours_Per_Day, Sleep_Hours_Per_Day, Social_Hours_Per_Day, Physical_Activity_Hours_Per_Day, Extracurricular_Hours_Per_Day, GPA, Stress_Level) VALUES (?, ?, ?, ?, ?, ?, ?)", tuple(inputs))
+                            cur.execute("INSERT INTO user_feedback (Study_Hours_Per_Day, Sleep_Hours_Per_Day, Social_Hours_Per_Day, Physical_Activity_Hours_Per_Day, Extracurricular_Hours_Per_Day, GPA, Stress_Level, student_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (*inputs, st.session_state['username']))
                             conn.commit(); conn.close()
-                            st.success("Correction Saved!"); st.session_state['feedback_mode'] = False; st.rerun()
+                            st.success("Correction saved to your history!"); st.session_state['feedback_mode'] = False; st.rerun()
 
 elif page == "💬 AI Chatbot":
     st.title("💬 Gemini Student Counselor")
@@ -394,6 +413,38 @@ elif page == "💬 AI Chatbot":
                 message_placeholder.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
 
+# --- NEW PAGE: MY HISTORY ---
+elif page == "📜 My History":
+    st.title("📜 My Prediction History")
+    st.markdown("Review your past stress assessments and track your well-being over time.")
+    
+    conn = get_db_connection()
+    try:
+        # Fetching records specifically linked to the logged-in user
+        history_df = pd.read_sql_query(
+            "SELECT timestamp, Study_Hours_Per_Day, Sleep_Hours_Per_Day, GPA, Stress_Level FROM user_feedback WHERE student_id = ?", 
+            conn, 
+            params=(st.session_state['username'],)
+        )
+        
+        if history_df.empty:
+            st.info("You don't have any saved records yet. Go to the 'AI Predictor' tab to take your first assessment!")
+        else:
+            # Making the table look clean and readable
+            history_df.rename(columns={
+                'timestamp': 'Date & Time',
+                'Study_Hours_Per_Day': 'Study (Hours)',
+                'Sleep_Hours_Per_Day': 'Sleep (Hours)',
+                'Stress_Level': 'Stress Level'
+            }, inplace=True)
+            
+            st.dataframe(history_df, use_container_width=True, hide_index=True)
+            
+    except Exception as e:
+        st.error(f"Could not load history. Error: {e}")
+    finally:
+        conn.close()
+
 elif page == "📝 User Survey":
     st.title("📝 Student Lifestyle Survey")
     with st.form("survey_form"):
@@ -409,8 +460,9 @@ elif page == "📝 User Survey":
                 st.error("Error: > 24 Hours")
             else:
                 conn = get_db_connection(); cur = conn.cursor()
-                cur.execute("INSERT INTO user_feedback (Study_Hours_Per_Day, Sleep_Hours_Per_Day, Social_Hours_Per_Day, Physical_Activity_Hours_Per_Day, Extracurricular_Hours_Per_Day, GPA, Stress_Level) VALUES (?, ?, ?, ?, ?, ?, ?)", (s_study, s_sleep, s_social, s_phys, s_extra, s_gpa, s_stress))
-                conn.commit(); conn.close(); st.success("Data added.")
+                # Added the student_id to the survey insert so it saves to their history!
+                cur.execute("INSERT INTO user_feedback (Study_Hours_Per_Day, Sleep_Hours_Per_Day, Social_Hours_Per_Day, Physical_Activity_Hours_Per_Day, Extracurricular_Hours_Per_Day, GPA, Stress_Level, student_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (s_study, s_sleep, s_social, s_phys, s_extra, s_gpa, s_stress, st.session_state['username']))
+                conn.commit(); conn.close(); st.success("Survey data added to your history!")
 
 elif page == "⚙️ Account Settings":
     st.title("⚙️ Account Settings")
@@ -462,7 +514,7 @@ elif page == "📊 Dashboard":
     finally: conn.close()
     col1, col2 = st.columns(2)
     col1.metric("Testing Accuracy", f"{test_acc*100:.1f}%")
-    col2.metric("New Feedback", count_feed)
+    col2.metric("New Feedback Data", count_feed)
     st.markdown("---")
     st.subheader("⚙️ Model Maintenance")
     if st.button("🔄 Retrain Model"):

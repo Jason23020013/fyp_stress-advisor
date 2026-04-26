@@ -97,7 +97,8 @@ if not st.session_state['logged_in']:
                     }).execute()
                     st.success("Registration successful! Please switch to the Login tab.")
                 except Exception as e:
-                    st.error(f"Registration failed. This Student ID might already exist.")
+                    # This will print the actual database error to your screen!
+                    st.error(f"Registration failed. Real error: {e}")
             else:
                 st.error("Please fill in all fields (ID, Password, and Recovery Word).")
                 

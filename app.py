@@ -333,37 +333,37 @@ elif page == "🤖 AI Predictor":
         # 1. Study Hours
         col_s1, col_n1 = st.columns([3, 1])
         with col_s1:
-            st.slider("Study Hours (per day)", 0.0, 24.0, key="slider_study", step=0.5, on_change=sync_study, label_visibility="collapsed")
+            st.slider("Study Hours (per day)", 0.0, 24.0, key="slider_study", step=0.5, on_change=sync_study)
         with col_n1:
-            st.number_input("Study", 0.0, 24.0, key="num_study", step=0.5, on_change=sync_study_rev, label_visibility="collapsed")
+            st.number_input("Study", 0.0, 24.0, key="num_study", step=0.5, on_change=sync_study_rev, label_visibility="hidden")
 
         # 2. Sleep Hours
         col_s2, col_n2 = st.columns([3, 1])
         with col_s2:
-            st.slider("Sleep Hours", 0.0, 24.0, key="slider_sleep", step=0.5, on_change=sync_sleep, label_visibility="collapsed")
+            st.slider("Sleep Hours (per day)", 0.0, 24.0, key="slider_sleep", step=0.5, on_change=sync_sleep)
         with col_n2:
-            st.number_input("Sleep", 0.0, 24.0, key="num_sleep", step=0.5, on_change=sync_sleep_rev, label_visibility="collapsed")
+            st.number_input("Sleep", 0.0, 24.0, key="num_sleep", step=0.5, on_change=sync_sleep_rev, label_visibility="hidden")
 
         # 3. Social Hours
         col_s3, col_n3 = st.columns([3, 1])
         with col_s3:
-            st.slider("Social Hours", 0.0, 24.0, key="slider_social", step=0.5, on_change=sync_social, label_visibility="collapsed")
+            st.slider("Social Hours (per day)", 0.0, 24.0, key="slider_social", step=0.5, on_change=sync_social)
         with col_n3:
-            st.number_input("Social", 0.0, 24.0, key="num_social", step=0.5, on_change=sync_social_rev, label_visibility="collapsed")
+            st.number_input("Social", 0.0, 24.0, key="num_social", step=0.5, on_change=sync_social_rev, label_visibility="hidden")
 
         # 4. Physical Activity
         col_s4, col_n4 = st.columns([3, 1])
         with col_s4:
-            st.slider("Physical Activity", 0.0, 24.0, key="slider_phys", step=0.5, on_change=sync_phys, label_visibility="collapsed")
+            st.slider("Physical Activity (per day)", 0.0, 24.0, key="slider_phys", step=0.5, on_change=sync_phys)
         with col_n4:
-            st.number_input("Physical", 0.0, 24.0, key="num_phys", step=0.5, on_change=sync_phys_rev, label_visibility="collapsed")
+            st.number_input("Physical", 0.0, 24.0, key="num_phys", step=0.5, on_change=sync_phys_rev, label_visibility="hidden")
 
         # 5. Extracurriculars
         col_s5, col_n5 = st.columns([3, 1])
         with col_s5:
-            st.slider("Extracurriculars", 0.0, 24.0, key="slider_extra", step=0.5, on_change=sync_extra, label_visibility="collapsed")
+            st.slider("Extracurriculars (per day)", 0.0, 24.0, key="slider_extra", step=0.5, on_change=sync_extra)
         with col_n5:
-            st.number_input("Extra", 0.0, 24.0, key="num_extra", step=0.5, on_change=sync_extra_rev, label_visibility="collapsed")
+            st.number_input("Extra", 0.0, 24.0, key="num_extra", step=0.5, on_change=sync_extra_rev, label_visibility="hidden")
 
         study = st.session_state.num_study
         sleep = st.session_state.num_sleep

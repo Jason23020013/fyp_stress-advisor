@@ -40,6 +40,15 @@ except Exception as e:
     st.error("❌ Failed to connect to the Supabase Cloud Database. Please check your Streamlit Secrets configuration.")
     st.stop()
 
+# --- AUTO-LOGIN HACK (防止刷新掉线) ---
+if "user" in st.query_params:
+    auto_user = st.query_params["user"]
+    if auto_user and 'logged_in' not in st.session_state or not st.session_state.get('logged_in', False):
+        st.session_state['logged_in'] = True
+        st.session_state['username'] = auto_user
+        # 为了速度和简便，自动恢复的会话默认给 Student 权限
+        st.session_state['user_role'] = "Student" 
+
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'username' not in st.session_state:
@@ -74,6 +83,10 @@ if not st.session_state['logged_in']:
                 st.session_state['messages'] = [] 
                 st.session_state['chat_loaded'] = False
                 st.session_state.pop('last_pred', None) 
+                
+                # 将用户名写入 URL 参数，防止刷新掉线
+                st.query_params["user"] = l_user 
+                
                 st.success(f"Welcome back, {l_user}!")
                 time.sleep(1)
                 st.rerun()
@@ -208,6 +221,8 @@ if st.sidebar.button("🚪 Logout"):
     st.session_state['messages'] = []
     st.session_state['chat_loaded'] = False
     st.session_state.pop('last_pred', None) 
+    # 登出时清空 URL 参数
+    st.query_params.clear()
     st.rerun()
 
 st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3062/3062331.png", width=100)
@@ -266,7 +281,6 @@ elif page == "🤖 AI Predictor":
         st.subheader("Your Daily Habits")
         st.caption("💡 You can use the sliders or type the numbers directly.")
 
-        
         def sync_study():
             st.session_state.num_study = st.session_state.slider_study
         def sync_study_rev():
@@ -308,8 +322,6 @@ elif page == "🤖 AI Predictor":
         if 'slider_extra' not in st.session_state: st.session_state.slider_extra = 1.0
         if 'num_extra' not in st.session_state: st.session_state.num_extra = 1.0
 
-       
-        
         # 1. Study Hours
         col_s1, col_n1 = st.columns([3, 1])
         with col_s1:
@@ -345,7 +357,6 @@ elif page == "🤖 AI Predictor":
         with col_n5:
             st.number_input("Extra", 0.0, 24.0, key="num_extra", step=0.5, on_change=sync_extra_rev, label_visibility="collapsed")
 
-        
         study = st.session_state.num_study
         sleep = st.session_state.num_sleep
         social = st.session_state.num_social
@@ -363,7 +374,6 @@ elif page == "🤖 AI Predictor":
             st.markdown(f"**🚨 Time Overload:** :red[You are over by {abs(hours_left):.1f} hours!] (Used: {total_hours}/24)")
             st.progress(1.0) 
 
-        
         gpa = st.slider("Current GPA", 0.0, 4.0, 3.0, step=0.1)
         lifestyle_score = social + physical + extra
         academic_pressure = gpa * study

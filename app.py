@@ -264,17 +264,98 @@ elif page == "🤖 AI Predictor":
     
     with c1:
         st.subheader("Your Daily Habits")
+        st.caption("💡 You can use the sliders or type the numbers directly.")
+
         
-        # 直接使用原生的数字输入框，彻底解决无法输入的问题
-        study = st.number_input("Study Hours (per day)", min_value=0.0, max_value=24.0, value=5.0, step=0.1)
-        sleep = st.number_input("Sleep Hours (per day)", min_value=0.0, max_value=24.0, value=7.0, step=0.1)
-        social = st.number_input("Social Hours (per day)", min_value=0.0, max_value=24.0, value=2.0, step=0.1)
-        physical = st.number_input("Physical Activity (per day)", min_value=0.0, max_value=24.0, value=1.0, step=0.1)
-        extra = st.number_input("Extracurriculars (per day)", min_value=0.0, max_value=24.0, value=1.0, step=0.1)
+        def sync_study():
+            st.session_state.num_study = st.session_state.slider_study
+        def sync_study_rev():
+            st.session_state.slider_study = st.session_state.num_study
+            
+        def sync_sleep():
+            st.session_state.num_sleep = st.session_state.slider_sleep
+        def sync_sleep_rev():
+            st.session_state.slider_sleep = st.session_state.num_sleep
+            
+        def sync_social():
+            st.session_state.num_social = st.session_state.slider_social
+        def sync_social_rev():
+            st.session_state.slider_social = st.session_state.num_social
+            
+        def sync_phys():
+            st.session_state.num_phys = st.session_state.slider_phys
+        def sync_phys_rev():
+            st.session_state.slider_phys = st.session_state.num_phys
+            
+        def sync_extra():
+            st.session_state.num_extra = st.session_state.slider_extra
+        def sync_extra_rev():
+            st.session_state.slider_extra = st.session_state.num_extra
+
+        # 初始化 Session State (如果还没有的话)
+        if 'slider_study' not in st.session_state: st.session_state.slider_study = 5.0
+        if 'num_study' not in st.session_state: st.session_state.num_study = 5.0
         
+        if 'slider_sleep' not in st.session_state: st.session_state.slider_sleep = 7.0
+        if 'num_sleep' not in st.session_state: st.session_state.num_sleep = 7.0
+        
+        if 'slider_social' not in st.session_state: st.session_state.slider_social = 2.0
+        if 'num_social' not in st.session_state: st.session_state.num_social = 2.0
+        
+        if 'slider_phys' not in st.session_state: st.session_state.slider_phys = 1.0
+        if 'num_phys' not in st.session_state: st.session_state.num_phys = 1.0
+        
+        if 'slider_extra' not in st.session_state: st.session_state.slider_extra = 1.0
+        if 'num_extra' not in st.session_state: st.session_state.num_extra = 1.0
+
+       
+        
+        # 1. Study Hours
+        col_s1, col_n1 = st.columns([3, 1])
+        with col_s1:
+            st.slider("Study Hours (per day)", 0.0, 24.0, key="slider_study", step=0.5, on_change=sync_study, label_visibility="collapsed")
+        with col_n1:
+            st.number_input("Study", 0.0, 24.0, key="num_study", step=0.5, on_change=sync_study_rev, label_visibility="collapsed")
+
+        # 2. Sleep Hours
+        col_s2, col_n2 = st.columns([3, 1])
+        with col_s2:
+            st.slider("Sleep Hours", 0.0, 24.0, key="slider_sleep", step=0.5, on_change=sync_sleep, label_visibility="collapsed")
+        with col_n2:
+            st.number_input("Sleep", 0.0, 24.0, key="num_sleep", step=0.5, on_change=sync_sleep_rev, label_visibility="collapsed")
+
+        # 3. Social Hours
+        col_s3, col_n3 = st.columns([3, 1])
+        with col_s3:
+            st.slider("Social Hours", 0.0, 24.0, key="slider_social", step=0.5, on_change=sync_social, label_visibility="collapsed")
+        with col_n3:
+            st.number_input("Social", 0.0, 24.0, key="num_social", step=0.5, on_change=sync_social_rev, label_visibility="collapsed")
+
+        # 4. Physical Activity
+        col_s4, col_n4 = st.columns([3, 1])
+        with col_s4:
+            st.slider("Physical Activity", 0.0, 24.0, key="slider_phys", step=0.5, on_change=sync_phys, label_visibility="collapsed")
+        with col_n4:
+            st.number_input("Physical", 0.0, 24.0, key="num_phys", step=0.5, on_change=sync_phys_rev, label_visibility="collapsed")
+
+        # 5. Extracurriculars
+        col_s5, col_n5 = st.columns([3, 1])
+        with col_s5:
+            st.slider("Extracurriculars", 0.0, 24.0, key="slider_extra", step=0.5, on_change=sync_extra, label_visibility="collapsed")
+        with col_n5:
+            st.number_input("Extra", 0.0, 24.0, key="num_extra", step=0.5, on_change=sync_extra_rev, label_visibility="collapsed")
+
+        
+        study = st.session_state.num_study
+        sleep = st.session_state.num_sleep
+        social = st.session_state.num_social
+        physical = st.session_state.num_phys
+        extra = st.session_state.num_extra
+
         total_hours = study + sleep + social + physical + extra
         hours_left = 24.0 - total_hours
 
+        st.markdown("---")
         if hours_left >= 0:
             st.markdown(f"**⏱️ Time Budget:** :green[{hours_left:.1f} hours remaining] (Used: {total_hours}/24)")
             st.progress(total_hours / 24.0)
@@ -282,8 +363,8 @@ elif page == "🤖 AI Predictor":
             st.markdown(f"**🚨 Time Overload:** :red[You are over by {abs(hours_left):.1f} hours!] (Used: {total_hours}/24)")
             st.progress(1.0) 
 
-       
-        gpa = st.number_input("Current GPA", min_value=0.0, max_value=4.0, value=3.0, step=0.1)
+        
+        gpa = st.slider("Current GPA", 0.0, 4.0, 3.0, step=0.1)
         lifestyle_score = social + physical + extra
         academic_pressure = gpa * study
         

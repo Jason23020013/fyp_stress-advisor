@@ -43,11 +43,19 @@ except Exception as e:
 # --- AUTO-LOGIN HACK (防止刷新掉线) ---
 if "user" in st.query_params:
     auto_user = st.query_params["user"]
-    if auto_user and 'logged_in' not in st.session_state or not st.session_state.get('logged_in', False):
+    if auto_user and ('logged_in' not in st.session_state or not st.session_state.get('logged_in', False)):
         st.session_state['logged_in'] = True
         st.session_state['username'] = auto_user
-        # 为了速度和简便，自动恢复的会话默认给 Student 权限
-        st.session_state['user_role'] = "Student" 
+        
+        # 去云端数据库查一下这个用户的真实 Role
+        try:
+            role_res = supabase.table("users").select("role").eq("student_id", auto_user).execute()
+            if role_res.data:
+                st.session_state['user_role'] = role_res.data[0].get('role', 'Student')
+            else:
+                st.session_state['user_role'] = "Student"
+        except Exception:
+            st.session_state['user_role'] = "Student"
 
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False

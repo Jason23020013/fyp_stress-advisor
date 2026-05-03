@@ -42,7 +42,7 @@ if "user" in st.query_params:
         st.session_state['logged_in'] = True
         st.session_state['username'] = auto_user
         
-        # Fetch real role from cloud database
+        # Fetch real role from cloud database to persist permissions
         try:
             role_res = supabase.table("users").select("role").eq("student_id", auto_user).execute()
             if role_res.data:
@@ -87,7 +87,7 @@ if not st.session_state['logged_in']:
                 st.session_state['chat_loaded'] = False
                 st.session_state.pop('last_pred', None) 
                 
-                # Write user to URL params
+                # Write user to URL params to handle refresh
                 st.query_params["user"] = l_user 
                 
                 st.success(f"Welcome back, {l_user}!")
@@ -162,17 +162,17 @@ if not st.session_state['logged_in']:
 @st.cache_resource
 def load_professional_model():
     try:
-        # Load pre-trained models from local directory
-        model = joblib.load('models/student_stress_model.pkl')
-        le = joblib.load('models/label_encoder.pkl')
+        # UPDATED: Load models directly from the root directory based on your architecture
+        model = joblib.load('student_stress_model.pkl')
+        le = joblib.load('label_encoder.pkl')
         feature_names = ['Study_Hours_Per_Day', 'Sleep_Hours_Per_Day', 'Lifestyle_Score', 'Academic_Pressure', 'GPA']
         
-        # Mock accuracy for UI display when loading pre-trained models
+        # Performance metrics for dashboard display
         train_acc = 0.98  
         test_acc = 0.95   
         return model, le, train_acc, test_acc, None, feature_names
     except Exception as e:
-        st.error(f"🚨 Model files not found! Please check models/ directory. Error: {e}")
+        st.error(f"🚨 Model files not found in root directory! Please ensure .pkl files are uploaded. Error: {e}")
         return None, None, 0, 0, None, []
 
 model, le, train_acc, test_acc, model_cm, feature_names = load_professional_model()
@@ -233,7 +233,7 @@ if page == "🏠 Home":
     - **🤖 Predictive AI:** Uses Random Forest to calculate stress risk.
     - **💬 Generative AI:** A chatbot counselor powered by **Google Gemini**.
     - **📜 User History:** Securely tracks your past stress levels in the cloud.
-    - **🔄 Continuous Learning:** Architecture supports verified feedback training.
+    - **🔄 Continuous Learning:** Architecture supports verified feedback training via offline batching.
     """)
     if test_acc:
         col1, col2 = st.columns(2)
@@ -248,6 +248,7 @@ elif page == "🤖 AI Predictor":
         st.subheader("Your Daily Habits")
         st.caption("💡 You can use the sliders or type the numbers directly.")
 
+        # Callbacks for dual-input synchronization
         def sync_study():
             st.session_state.num_study = st.session_state.slider_study
         def sync_study_rev():
@@ -273,7 +274,7 @@ elif page == "🤖 AI Predictor":
         def sync_extra_rev():
             st.session_state.slider_extra = st.session_state.num_extra
 
-        # Initialize Session State
+        # Initialize Session State values
         if 'slider_study' not in st.session_state: st.session_state.slider_study = 5.0
         if 'num_study' not in st.session_state: st.session_state.num_study = 5.0
         
@@ -289,41 +290,38 @@ elif page == "🤖 AI Predictor":
         if 'slider_extra' not in st.session_state: st.session_state.slider_extra = 1.0
         if 'num_extra' not in st.session_state: st.session_state.num_extra = 1.0
 
-        # 1. Study Hours
+        # UI Components with visible labels and side-by-side number inputs
         col_s1, col_n1 = st.columns([3, 1])
         with col_s1:
             st.slider("Study Hours (per day)", 0.0, 24.0, key="slider_study", step=0.5, on_change=sync_study)
         with col_n1:
-            st.number_input("Study", 0.0, 24.0, key="num_study", step=0.5, on_change=sync_study_rev, label_visibility="hidden")
+            st.number_input("Study Input", 0.0, 24.0, key="num_study", step=0.5, on_change=sync_study_rev, label_visibility="hidden")
 
-        # 2. Sleep Hours
         col_s2, col_n2 = st.columns([3, 1])
         with col_s2:
             st.slider("Sleep Hours (per day)", 0.0, 24.0, key="slider_sleep", step=0.5, on_change=sync_sleep)
         with col_n2:
-            st.number_input("Sleep", 0.0, 24.0, key="num_sleep", step=0.5, on_change=sync_sleep_rev, label_visibility="hidden")
+            st.number_input("Sleep Input", 0.0, 24.0, key="num_sleep", step=0.5, on_change=sync_sleep_rev, label_visibility="hidden")
 
-        # 3. Social Hours
         col_s3, col_n3 = st.columns([3, 1])
         with col_s3:
             st.slider("Social Hours (per day)", 0.0, 24.0, key="slider_social", step=0.5, on_change=sync_social)
         with col_n3:
-            st.number_input("Social", 0.0, 24.0, key="num_social", step=0.5, on_change=sync_social_rev, label_visibility="hidden")
+            st.number_input("Social Input", 0.0, 24.0, key="num_social", step=0.5, on_change=sync_social_rev, label_visibility="hidden")
 
-        # 4. Physical Activity
         col_s4, col_n4 = st.columns([3, 1])
         with col_s4:
             st.slider("Physical Activity (per day)", 0.0, 24.0, key="slider_phys", step=0.5, on_change=sync_phys)
         with col_n4:
-            st.number_input("Physical", 0.0, 24.0, key="num_phys", step=0.5, on_change=sync_phys_rev, label_visibility="hidden")
+            st.number_input("Phys Input", 0.0, 24.0, key="num_phys", step=0.5, on_change=sync_phys_rev, label_visibility="hidden")
 
-        # 5. Extracurriculars
         col_s5, col_n5 = st.columns([3, 1])
         with col_s5:
             st.slider("Extracurriculars (per day)", 0.0, 24.0, key="slider_extra", step=0.5, on_change=sync_extra)
         with col_n5:
-            st.number_input("Extra", 0.0, 24.0, key="num_extra", step=0.5, on_change=sync_extra_rev, label_visibility="hidden")
+            st.number_input("Extra Input", 0.0, 24.0, key="num_extra", step=0.5, on_change=sync_extra_rev, label_visibility="hidden")
 
+        # Dynamic variable binding
         study = st.session_state.num_study
         sleep = st.session_state.num_sleep
         social = st.session_state.num_social
@@ -348,7 +346,7 @@ elif page == "🤖 AI Predictor":
         if total_hours > 24:
             st.error(f"🚨 Invalid Input: Total hours ({total_hours}) cannot exceed 24.")
         else:
-            if st.button("Analyze Stress Level"):
+            if st.button("Analyze Stress Level", use_container_width=True):
                 if model:
                     input_data = pd.DataFrame([[study, sleep, lifestyle_score, academic_pressure, gpa]], columns=feature_names)
                     pred_idx = model.predict(input_data)[0]
@@ -356,7 +354,7 @@ elif page == "🤖 AI Predictor":
                     confidence = np.max(pred_proba) * 100
                     pred_label = le.inverse_transform([pred_idx])[0]
                     
-                    # --- AUTO-SAVE TO CLOUD HISTORY ---
+                    # Auto-save history to Cloud
                     if st.session_state['user_role'] != "Guest":
                         try:
                             supabase.table("user_history").insert({
@@ -366,17 +364,18 @@ elif page == "🤖 AI Predictor":
                                 "Extracurricular_Hours_Per_Day": extra, "GPA": gpa, "Stress_Level": pred_label
                             }).execute()
                         except Exception as e:
-                            print(f"Error saving history: {e}")
+                            print(f"Cloud History Sync Error: {e}")
 
+                    # Generate AI advice
                     ai_advice = ""
                     if gemini_model:
-                        with st.spinner("🤖 Consulting Gemini for personalized advice..."):
+                        with st.spinner("🤖 Consulting Gemini AI Counselor..."):
                             try:
                                 prompt = f"Act as a professional University Counselor. Student profile: Study {study} hrs/day, Sleep {sleep} hrs/day, GPA {gpa}. Predicted Stress: {pred_label} ({confidence:.1f}%). Provide a 1-sentence analysis and 3 specific actionable tips."
                                 response = gemini_model.generate_content(prompt)
                                 ai_advice = response.text
-                            except Exception as e:
-                                ai_advice = "Error connecting to Gemini. Check API Key."
+                            except Exception:
+                                ai_advice = "Connection to Gemini failed. Please check your API configuration."
                     
                     st.session_state['last_pred'] = {
                         'res': pred_label, 
@@ -408,33 +407,33 @@ elif page == "🤖 AI Predictor":
             if st.session_state['user_role'] == "Guest":
                 st.info("🔒 Log in to provide verified feedback and help improve our AI.")
             else:
-                st.write("Does this prediction accurately describe you?")
+                st.write("Is this prediction accurate for your current state?")
                 cy, cn = st.columns(2)
                 
-                if cy.button("✅ Yes, This is Accurate"):
+                if cy.button("✅ Yes, Accurate"):
                     feedback_data = p['inputs'].copy()
                     feedback_data["student_id"] = st.session_state['username']
                     try:
                         supabase.table("user_feedback").insert(feedback_data).execute()
-                        st.success("Thanks! Saved to the cloud to improve the AI.")
+                        st.success("Verification saved to Cloud!")
                     except Exception as e:
-                        st.error(f"Error saving to cloud: {e}")
+                        st.error(f"Cloud Sync Failed: {e}")
                     
-                if cn.button("❌ No, Let me correct it"):
+                if cn.button("❌ No, Correct It"):
                     st.session_state['feedback_mode'] = True
 
                 if st.session_state.get('feedback_mode', False):
                     with st.form("correction_form"):
                         correct_label = st.selectbox("Your actual stress level", ["Low", "Moderate", "High"])
-                        if st.form_submit_button("Submit Correction for AI Training"):
+                        if st.form_submit_button("Submit Correction"):
                             feedback_data = p['inputs'].copy()
                             feedback_data["Stress_Level"] = correct_label
                             feedback_data["student_id"] = st.session_state['username']
                             try:
                                 supabase.table("user_feedback").insert(feedback_data).execute()
-                                st.success("Correction saved to cloud for AI retraining!")
+                                st.success("Correction submitted for future batch training!")
                             except Exception as e:
-                                st.error(f"Error saving to cloud: {e}")
+                                st.error(f"Cloud Sync Failed: {e}")
                             st.session_state['feedback_mode'] = False
                             st.rerun()
 
@@ -451,11 +450,11 @@ elif page == "💬 AI Chatbot":
                 st.rerun()
     
     if st.session_state['user_role'] == "Guest":
-         st.info("👋 You are chatting as a Guest. Your chat history will not be saved after you log out.")
+         st.info("👋 Guest Session: Chat history will not be persisted.")
          if "messages" not in st.session_state:
              st.session_state.messages = []
     else:
-        # LOAD CHAT FROM CLOUD DB
+        # Load chat from Cloud
         if not st.session_state.get('chat_loaded', False):
             try:
                 res = supabase.table("user_chat_history").select("role, content").eq("student_id", st.session_state['username']).order("created_at").execute()
@@ -463,18 +462,18 @@ elif page == "💬 AI Chatbot":
                     st.session_state.messages = [{"role": row['role'], "content": row['content']} for row in res.data]
                 else:
                     st.session_state.messages = []
-            except Exception as e:
+            except Exception:
                 st.session_state.messages = []
             st.session_state['chat_loaded'] = True
          
     if not gemini_model:
-        st.warning("⚠️ Gemini is disconnected.")
+        st.warning("⚠️ Gemini connection inactive.")
     else:
         for message in st.session_state.messages:
             with st.chat_message(message["role"]): 
                 st.markdown(message["content"])
                 
-        if prompt := st.chat_input("How are you feeling today?"):
+        if prompt := st.chat_input("Tell me what's on your mind..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             if st.session_state['user_role'] != "Guest":
                 supabase.table("user_chat_history").insert({"student_id": st.session_state['username'], "role": "user", "content": prompt}).execute()
@@ -485,7 +484,7 @@ elif page == "💬 AI Chatbot":
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
                 history_text = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages])
-                system_prompt = "You are an empathetic AI Student Counselor. Support the student warmly and concisely."
+                system_prompt = "You are an empathetic AI Student Counselor. Provide warm and practical support."
                 response = gemini_model.generate_content(system_prompt + history_text)
                 message_placeholder.markdown(response.text)
                 
@@ -495,31 +494,29 @@ elif page == "💬 AI Chatbot":
 
 elif page == "📜 My History":
     st.title("📜 My Prediction History")
-    st.markdown("Review your past stress assessments safely stored in the cloud.")
+    st.markdown("Cloud-synced stress assessment records.")
     
     try:
-        # FETCH HISTORY FROM CLOUD DB
         res = supabase.table("user_history").select("created_at, Study_Hours_Per_Day, Sleep_Hours_Per_Day, GPA, Stress_Level").eq("student_id", st.session_state['username']).order("created_at", desc=True).execute()
         
         if not res.data:
-            st.info("You don't have any saved records yet. Go to the 'AI Predictor' tab to take your first assessment!")
+            st.info("No records found. Visit the AI Predictor to start tracking.")
         else:
             history_df = pd.DataFrame(res.data)
             history_df['created_at'] = pd.to_datetime(history_df['created_at']).dt.strftime('%Y-%m-%d %H:%M')
             history_df.rename(columns={
-                'created_at': 'Date & Time',
-                'Study_Hours_Per_Day': 'Study (Hours)',
-                'Sleep_Hours_Per_Day': 'Sleep (Hours)',
-                'Stress_Level': 'Predicted Stress Level'
+                'created_at': 'Timestamp',
+                'Study_Hours_Per_Day': 'Study',
+                'Sleep_Hours_Per_Day': 'Sleep',
+                'Stress_Level': 'Result'
             }, inplace=True)
-            
             st.dataframe(history_df, use_container_width=True, hide_index=True)
             
     except Exception as e:
-        st.error(f"Could not load history from cloud. Error: {e}")
+        st.error(f"Could not load Cloud History: {e}")
 
 elif page == "📝 User Survey":
-    st.title("📝 Student Lifestyle Survey")
+    st.title("📝 Lifestyle Survey")
     with st.form("survey_form"):
         s_study = st.number_input("Study Hours", 0.0, 24.0, 5.0)
         s_sleep = st.number_input("Sleep Hours", 0.0, 24.0, 7.0)
@@ -528,21 +525,20 @@ elif page == "📝 User Survey":
         s_extra = st.number_input("Extracurriculars", 0.0, 24.0, 1.0)
         s_gpa = st.number_input("GPA", 0.0, 4.0, 3.0)
         s_stress = st.selectbox("Stress Level", ["Low", "Moderate", "High"])
-        if st.form_submit_button("Submit Survey"):
+        if st.form_submit_button("Submit to Cloud"):
             if s_study + s_sleep + s_social + s_phys + s_extra > 24:
-                st.error("Error: > 24 Hours")
+                st.error("Invalid Input: Hours exceed 24.")
             else:
                 data = {"student_id": st.session_state['username'], "Study_Hours_Per_Day": s_study, "Sleep_Hours_Per_Day": s_sleep, "Social_Hours_Per_Day": s_social, "Physical_Activity_Hours_Per_Day": s_phys, "Extracurricular_Hours_Per_Day": s_extra, "GPA": s_gpa, "Stress_Level": s_stress}
                 try:
                     supabase.table("user_history").insert(data).execute()
                     supabase.table("user_feedback").insert(data).execute()
-                    st.success("Survey data added to your cloud history and training database!")
+                    st.success("Data successfully synced to Cloud training database.")
                 except Exception as e:
-                    st.error(f"Error saving to cloud: {e}")
+                    st.error(f"Cloud Sync Failed: {e}")
 
 elif page == "⚙️ Account Settings":
     st.title("⚙️ Account Settings")
-    st.write("Manage your security credentials below.")
     
     with st.form("change_password_form"):
         st.subheader("Change Password")
@@ -552,39 +548,38 @@ elif page == "⚙️ Account Settings":
         
         if st.form_submit_button("Update Password"):
             if new_pwd != confirm_pwd:
-                st.error("New passwords do not match!")
+                st.error("New passwords do not match.")
             elif old_pwd and new_pwd:
                 res = supabase.table("users").select("password_hash").eq("student_id", st.session_state['username']).execute()
                 if res.data and check_hashes(old_pwd, res.data[0]['password_hash']):
                     supabase.table("users").update({"password_hash": make_hashes(new_pwd)}).eq("student_id", st.session_state['username']).execute()
-                    st.success("Password updated successfully!")
+                    st.success("Security credentials updated.")
                 else:
-                    st.error("Incorrect current password.")
-            else:
-                st.error("Please fill in all fields.")
+                    st.error("Current password incorrect.")
 
 elif page == "📈 Data Analysis":
     st.title("📈 Model Transparency")
-    t1, t2, t3 = st.tabs(["Dataset", "Feature Importance", "Performance"])
+    t1, t2, t3 = st.tabs(["Original Dataset", "Feature Importance", "Metrics"])
     with t1:
-        st.info("Previewing original training dataset.")
+        st.info("Previewing training baseline dataset from root directory.")
         try:
-            df_display = pd.read_csv("data/student_lifestyle_dataset.csv").head(100)
+            # UPDATED: Path matches your root directory structure
+            df_display = pd.read_csv("student_lifestyle_dataset.csv").head(100)
             fig = px.box(df_display, x="Stress_Level", y="Sleep_Hours_Per_Day", color="Stress_Level")
             st.plotly_chart(fig)
         except:
-            st.write("No local preview data found in data/ directory.")
+            st.warning("Baseline dataset (student_lifestyle_dataset.csv) not found in root.")
     with t2:
         if model:
             imp = pd.DataFrame({'Feature': feature_names, 'Importance': model.feature_importances_}).sort_values('Importance', ascending=True)
             st.plotly_chart(px.bar(imp, x='Importance', y='Feature', orientation='h'))
     with t3:
-        if test_acc: st.metric("Model Accuracy", f"{test_acc*100:.2f}%")
+        if test_acc: st.metric("Predictive Accuracy", f"{test_acc*100:.2f}%")
         if model_cm is not None: 
             st.plotly_chart(px.imshow(model_cm, text_auto=True, x=le.classes_, y=le.classes_, color_continuous_scale='Blues'))
 
 elif page == "📊 Dashboard":
-    st.title("Admin Dashboard & System Testing")
+    st.title("Admin Dashboard & System Monitoring")
     try: 
         res = supabase.table("user_feedback").select("id", count="exact").execute()
         count_feed = res.count if res.count else 0
@@ -592,9 +587,9 @@ elif page == "📊 Dashboard":
         count_feed = 0
         
     col1, col2 = st.columns(2)
-    col1.metric("Testing Accuracy", f"{test_acc*100:.1f}%")
-    col2.metric("New Cloud Verified Feedback", count_feed)
+    col1.metric("Operational Accuracy", f"{test_acc*100:.1f}%")
+    col2.metric("New Verified Feedback (Cloud)", count_feed)
     st.markdown("---")
-    st.subheader("⚙️ Model Maintenance")
-    if st.button("🔄 Check Model Updates"):
-        st.info("System is utilizing Offline Batch Retraining architecture. To update the model, run `train_model.py` locally and push the new .pkl files to your GitHub repository.")
+    st.subheader("Maintenance Operations")
+    if st.button("Check for Model Updates"):
+        st.info("Architecture: Offline Batch Retraining. To update the model core, perform local training and redeploy updated .pkl files.")

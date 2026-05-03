@@ -264,14 +264,13 @@ elif page == "🤖 AI Predictor":
     
     with c1:
         st.subheader("Your Daily Habits")
-                
-        st.caption("💡 **Tip:** You can drag the slider, or **click the number** on the right to type directly!")
-                
-        study = st.slider("Study Hours (per day)", 0.0, 24.0, 5.0, step=0.1)
-        sleep = st.slider("Sleep Hours (per day)", 0.0, 24.0, 7.0, step=0.1)
-        social = st.slider("Social Hours (per day)", 0.0, 24.0, 2.0, step=0.1)
-        physical = st.slider("Physical Activity (per day)", 0.0, 24.0, 1.0, step=0.1)
-        extra = st.slider("Extracurriculars (per day)", 0.0, 24.0, 1.0, step=0.1)
+        
+        # 直接使用原生的数字输入框，彻底解决无法输入的问题
+        study = st.number_input("Study Hours (per day)", min_value=0.0, max_value=24.0, value=5.0, step=0.1)
+        sleep = st.number_input("Sleep Hours (per day)", min_value=0.0, max_value=24.0, value=7.0, step=0.1)
+        social = st.number_input("Social Hours (per day)", min_value=0.0, max_value=24.0, value=2.0, step=0.1)
+        physical = st.number_input("Physical Activity (per day)", min_value=0.0, max_value=24.0, value=1.0, step=0.1)
+        extra = st.number_input("Extracurriculars (per day)", min_value=0.0, max_value=24.0, value=1.0, step=0.1)
         
         total_hours = study + sleep + social + physical + extra
         hours_left = 24.0 - total_hours
@@ -283,7 +282,8 @@ elif page == "🤖 AI Predictor":
             st.markdown(f"**🚨 Time Overload:** :red[You are over by {abs(hours_left):.1f} hours!] (Used: {total_hours}/24)")
             st.progress(1.0) 
 
-        gpa = st.slider("Current GPA", 0.0, 4.0, 3.0, step=0.1)
+       
+        gpa = st.number_input("Current GPA", min_value=0.0, max_value=4.0, value=3.0, step=0.1)
         lifestyle_score = social + physical + extra
         academic_pressure = gpa * study
         

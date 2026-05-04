@@ -141,7 +141,7 @@ def load_and_validate_model():
 model, le, train_acc, test_acc, model_cm, feature_names = load_and_validate_model()
 
 # ==========================================
-# 3. Dual API Key & Persona System (Updated to 3.1)
+# 3. Precision Dual-Engine System (3 Flash + 3.1 Flash Lite)
 # ==========================================
 
 COUNSELOR_PERSONA = """
@@ -158,38 +158,68 @@ def get_gemini_response(prompt_text):
     key1 = st.secrets.get("GEMINI_API_KEY_1")
     key2 = st.secrets.get("GEMINI_API_KEY_2")
     
-    # 兼容处理：如果没有设置双Key，默认使用最高额度的 3.1-flash-lite
-    if not key1 and not key2:
-        fallback_key = st.secrets.get("GEMINI_API_KEY")
-        if fallback_key:
-            genai.configure(api_key=fallback_key)
-            return genai.GenerativeModel('gemini-3.1-flash-lite', system_instruction=COUNSELOR_PERSONA).generate_content(prompt_text).text
+    # 如果没配双 Key，就用默认 Key
+    active_key = key1 if key1 else st.secrets.get("GEMINI_API_KEY")
+    if not active_key:
         return "AI Counselor API Keys are not properly configured."
 
-    # Strategy 1: Try Gemini 2.5 Flash (高性能，每天 20 次)
+    # ==========================================
+    # 🌟 策略 1: 顶配主引擎 (高智商，每天 20 次)
+    # 优先尝试使用你截图里的 Text-out Models
+    # ==========================================
     try:
-        if key1:
-            genai.configure(api_key=key1)
-            model_25 = genai.GenerativeModel('gemini-2.5-flash', system_instruction=COUNSELOR_PERSONA)
-            response = model_25.generate_content(prompt_text)
-            return response.text + "\n\n*(Engine: Gemini 2.5 Flash)*"
+        genai.configure(api_key=active_key)
+        # 针对新旧API命名进行兼容，优先尝试高智商的2.5/3.0
+        model_name = 'gemini-3-flash' # 默认尝试最新的高智商版
+        model_primary = genai.GenerativeModel(model_name, system_instruction=COUNSELOR_PERSONA)
+        response = model_primary.generate_content(prompt_text)
+        return response.text + f"\n\n*(Engine: {model_name} - Premium)*"
     except Exception as e:
-        if "ResourceExhausted" in str(e) or "429" in str(e) or "quota" in str(e).lower() or "404" in str(e):
-            pass # 捕获到额度不足或找不到模型，静默放行到降级策略
-        else:
+        # 如果不是配额耗尽或找不到模型(404)，直接报错
+        if not ("ResourceExhausted" in str(e) or "429" in str(e) or "quota" in str(e).lower() or "404" in str(e)):
             return f"Error with Primary AI: {e}"
 
-    # Strategy 2: Fallback to Gemini 3.1 Flash Lite (高额度，每天 500 次)
+    # ==========================================
+    # 🛡️ 策略 2: 动态兜底引擎 (自动寻找可用的模型)
+    # ==========================================
     try:
-        if key2:
-            genai.configure(api_key=key2)
-            model_31 = genai.GenerativeModel('gemini-3.1-flash-lite', system_instruction=COUNSELOR_PERSONA)
-            response = model_31.generate_content(prompt_text)
-            return response.text + "\n\n*(Engine: Gemini 3.1 Flash Lite Fallback)*"
-    except Exception as e2:
-        return f"AI Counselor is temporarily unavailable due to high traffic. Error: {e2}"
+        fallback_key = key2 if key2 else active_key
+        genai.configure(api_key=fallback_key)
         
-    return "AI Counselor unavailable."
+        # 让代码自动向 Google 索要当前可用的模型列表
+        available_models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                available_models.append(m.name.replace('models/', ''))
+                
+        # 智能挑选替补模型
+        # 1. 优先找 3.1 Flash Lite (每天 500 次限额的那个)
+        fallback_name = None
+        for name in available_models:
+             if "gemini-3.1-flash-lite" in name:
+                 fallback_name = name
+                 break
+        
+        # 2. 如果没找到 3.1 Lite，找其他带有 Lite 或 Flash 的模型
+        if not fallback_name:
+             for name in available_models:
+                 if ("lite" in name or "flash" in name) and "pro" not in name:
+                     fallback_name = name
+                     break
+                     
+        # 3. 如果还是没有，抓列表里第一个保底
+        if not fallback_name and available_models:
+            fallback_name = available_models[0]
+            
+        if fallback_name:
+            model_fallback = genai.GenerativeModel(fallback_name, system_instruction=COUNSELOR_PERSONA)
+            response = model_fallback.generate_content(prompt_text)
+            return response.text + f"\n\n*(Engine: {fallback_name} - Fallback)*"
+        else:
+            return "Critical Error: API returned empty list of available models."
+
+    except Exception as e2:
+        return f"Auto-Fallback failed entirely. Error: {e2}"
 
 # --- UI CONFIGURATION ---
 st.set_page_config(page_title="Gemini AI Counselor", layout="wide")
@@ -229,7 +259,7 @@ if page == "🏠 Home":
     st.markdown("""
     ### System Features:
     - **🤖 Predictive AI:** Real-time stress risk calculation based on lifestyle patterns.
-    - **💬 Generative AI:** Empathetic counseling support powered by **Google Gemini** (Dual-Engine Architecture).
+    - **💬 Generative AI:** Empathetic counseling support powered by **Google Gemini** (Precision Dual-Engine System).
     - **📜 Cloud Integration:** Secure tracking of wellness history via Supabase.
     """)
     if test_acc > 0:
@@ -283,12 +313,11 @@ elif page == "🤖 AI Predictor":
                     if st.session_state['user_role'] != "Guest":
                         supabase.table("user_history").insert({"student_id": st.session_state['username'], "Study_Hours_Per_Day": study, "Sleep_Hours_Per_Day": sleep, "Social_Hours_Per_Day": social, "Physical_Activity_Hours_Per_Day": phys, "Extracurricular_Hours_Per_Day": extra, "GPA": gpa, "Stress_Level": pred_label}).execute()
 
-                    # === 新增的“摆烂（Apathy）”检测机制 ===
+                    # === “摆烂（Apathy）”检测机制 ===
                     apathy_flag = ""
                     if study <= 0.5 and gpa < 2.0:
                         apathy_flag = "⚠️ CLINICAL NOTE: This student has almost 0 study hours and a low GPA. The ML model predicted high stress, but psychologically, they might actually be experiencing 'Academic Disengagement', burnout, or apathy (they simply do not care about studies). DO NOT assume they are overwhelmed by studying. Instead, gently address their motivation, ask about their true interests (based on their high social/extracurricular hours), and provide advice on finding purpose rather than just 'stress relief'."
 
-                    # 修复后的全数据 Prompt 注入
                     p = f"Student Profile: {study}h Study, {sleep}h Sleep, {social}h Social, {phys}h Physical, {extra}h Extracurricular, {gpa} GPA. ML Prediction: {pred_label} Stress ({confidence:.1f}% confidence). {apathy_flag}\n\nProvide a realistic 1-sentence analysis of their situation and time management, followed by 3 direct, actionable tips."
                     
                     ai_advice = get_gemini_response(p)

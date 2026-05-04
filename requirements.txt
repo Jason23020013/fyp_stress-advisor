@@ -5,3 +5,5 @@ google-generativeai
 plotly
 imbalanced-learn
 supabase
+google-generativeai>=0.5.2
+

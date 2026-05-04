@@ -11,7 +11,7 @@ try:
     from supabase import create_client, Client
     import google.generativeai as genai
 except ImportError as e:
-    st.error(f"🚨 Missing required libraries: {e}. Please ensure your requirements.txt includes supabase and google-generativeai.")
+    st.error(f"🚨 Missing required libraries: {e}. Please ensure your requirements.txt includes supabase and google-generativeai>=0.5.2.")
     st.stop()
 
 # ==========================================
@@ -141,7 +141,7 @@ def load_and_validate_model():
 model, le, train_acc, test_acc, model_cm, feature_names = load_and_validate_model()
 
 # ==========================================
-# 3. Dual API Key & Persona System
+# 3. Dual API Key & Persona System (Updated to 3.1)
 # ==========================================
 
 COUNSELOR_PERSONA = """
@@ -158,14 +158,15 @@ def get_gemini_response(prompt_text):
     key1 = st.secrets.get("GEMINI_API_KEY_1")
     key2 = st.secrets.get("GEMINI_API_KEY_2")
     
+    # 兼容处理：如果没有设置双Key，默认使用最高额度的 3.1-flash-lite
     if not key1 and not key2:
         fallback_key = st.secrets.get("GEMINI_API_KEY")
         if fallback_key:
             genai.configure(api_key=fallback_key)
-            return genai.GenerativeModel('gemini-1.5-flash', system_instruction=COUNSELOR_PERSONA).generate_content(prompt_text).text
+            return genai.GenerativeModel('gemini-3.1-flash-lite', system_instruction=COUNSELOR_PERSONA).generate_content(prompt_text).text
         return "AI Counselor API Keys are not properly configured."
 
-    # Strategy 1: Try Gemini 2.5 Flash
+    # Strategy 1: Try Gemini 2.5 Flash (高性能，每天 20 次)
     try:
         if key1:
             genai.configure(api_key=key1)
@@ -173,18 +174,18 @@ def get_gemini_response(prompt_text):
             response = model_25.generate_content(prompt_text)
             return response.text + "\n\n*(Engine: Gemini 2.5 Flash)*"
     except Exception as e:
-        if "ResourceExhausted" in str(e) or "429" in str(e) or "quota" in str(e).lower():
-            pass
+        if "ResourceExhausted" in str(e) or "429" in str(e) or "quota" in str(e).lower() or "404" in str(e):
+            pass # 捕获到额度不足或找不到模型，静默放行到降级策略
         else:
             return f"Error with Primary AI: {e}"
 
-    # Strategy 2: Fallback to Gemini 1.5 Flash
+    # Strategy 2: Fallback to Gemini 3.1 Flash Lite (高额度，每天 500 次)
     try:
         if key2:
             genai.configure(api_key=key2)
-            model_15 = genai.GenerativeModel('gemini-1.5-flash', system_instruction=COUNSELOR_PERSONA)
-            response = model_15.generate_content(prompt_text)
-            return response.text + "\n\n*(Engine: Gemini 1.5 Flash Fallback)*"
+            model_31 = genai.GenerativeModel('gemini-3.1-flash-lite', system_instruction=COUNSELOR_PERSONA)
+            response = model_31.generate_content(prompt_text)
+            return response.text + "\n\n*(Engine: Gemini 3.1 Flash Lite Fallback)*"
     except Exception as e2:
         return f"AI Counselor is temporarily unavailable due to high traffic. Error: {e2}"
         
@@ -228,7 +229,7 @@ if page == "🏠 Home":
     st.markdown("""
     ### System Features:
     - **🤖 Predictive AI:** Real-time stress risk calculation based on lifestyle patterns.
-    - **💬 Generative AI:** Empathetic counseling support powered by **Google Gemini** (Dual-Engine 2.5/1.5).
+    - **💬 Generative AI:** Empathetic counseling support powered by **Google Gemini** (Dual-Engine Architecture).
     - **📜 Cloud Integration:** Secure tracking of wellness history via Supabase.
     """)
     if test_acc > 0:

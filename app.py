@@ -149,7 +149,7 @@ You are an empathetic, professional, and non-judgmental University Student Welln
 Core Directives:
 1. Tone: Warm, encouraging, and supportive. Use conversational language, not overly academic jargon.
 2. Data-Driven but Human: When a student's data is provided, acknowledge it gently. Do not scold them for bad habits; instead, offer constructive, bite-sized adjustments.
-3. Actionable Advice: Always provide realistic, easy-to-implement tips (e.g., 'Try the Pomodoro technique').
+3. Actionable Advice: Always provide realistic, easy-to-implement tips. If you notice a severe imbalance (e.g., extremely high social hours and 0 study hours), gently point out the reality of time management.
 4. The Medical Boundary (CRITICAL): You are an AI advisor, NOT a doctor. If a student mentions severe depression, self-harm, or overwhelming anxiety, you MUST immediately express deep care and gently direct them to seek professional campus medical or psychological help. Never attempt to diagnose.
 5. Brevity: Keep your responses concise, structured (use bullet points if listing tips), and under 150 words unless asked for details.
 """
@@ -282,7 +282,14 @@ elif page == "🤖 AI Predictor":
                     if st.session_state['user_role'] != "Guest":
                         supabase.table("user_history").insert({"student_id": st.session_state['username'], "Study_Hours_Per_Day": study, "Sleep_Hours_Per_Day": sleep, "Social_Hours_Per_Day": social, "Physical_Activity_Hours_Per_Day": phys, "Extracurricular_Hours_Per_Day": extra, "GPA": gpa, "Stress_Level": pred_label}).execute()
 
-                    p = f"Student Profile: {study}h Study, {sleep}h Sleep, {gpa} GPA. ML Prediction: {pred_label} Stress ({confidence:.1f}% confidence). Please provide a brief encouraging analysis and 3 specific, actionable tips based on this data."
+                    # === 新增的“摆烂（Apathy）”检测机制 ===
+                    apathy_flag = ""
+                    if study <= 0.5 and gpa < 2.0:
+                        apathy_flag = "⚠️ CLINICAL NOTE: This student has almost 0 study hours and a low GPA. The ML model predicted high stress, but psychologically, they might actually be experiencing 'Academic Disengagement', burnout, or apathy (they simply do not care about studies). DO NOT assume they are overwhelmed by studying. Instead, gently address their motivation, ask about their true interests (based on their high social/extracurricular hours), and provide advice on finding purpose rather than just 'stress relief'."
+
+                    # 修复后的全数据 Prompt 注入
+                    p = f"Student Profile: {study}h Study, {sleep}h Sleep, {social}h Social, {phys}h Physical, {extra}h Extracurricular, {gpa} GPA. ML Prediction: {pred_label} Stress ({confidence:.1f}% confidence). {apathy_flag}\n\nProvide a realistic 1-sentence analysis of their situation and time management, followed by 3 direct, actionable tips."
+                    
                     ai_advice = get_gemini_response(p)
                     
                     st.session_state['last_pred'] = {'res': pred_label, 'conf': confidence, 'advice': ai_advice, 'inputs': {"Study_Hours_Per_Day": study, "Sleep_Hours_Per_Day": sleep, "Social_Hours_Per_Day": social, "Physical_Activity_Hours_Per_Day": phys, "Extracurricular_Hours_Per_Day": extra, "GPA": gpa, "Stress_Level": pred_label}}

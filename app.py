@@ -1,9 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-import os
 import joblib
 import time
 import hashlib
@@ -50,16 +47,11 @@ if "user" in st.query_params:
         except Exception:
             st.session_state['user_role'] = "Student"
 
-if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
-if 'username' not in st.session_state:
-    st.session_state['username'] = ""
-if 'user_role' not in st.session_state:
-    st.session_state['user_role'] = "Guest"
-if 'feedback_mode' not in st.session_state:
-    st.session_state['feedback_mode'] = False
-if 'chat_loaded' not in st.session_state:
-    st.session_state['chat_loaded'] = False
+if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
+if 'username' not in st.session_state: st.session_state['username'] = ""
+if 'user_role' not in st.session_state: st.session_state['user_role'] = "Guest"
+if 'feedback_mode' not in st.session_state: st.session_state['feedback_mode'] = False
+if 'chat_loaded' not in st.session_state: st.session_state['chat_loaded'] = False
 
 # ==========================================
 # 1. Access Control (Login / Register)
@@ -127,12 +119,10 @@ if not st.session_state['logged_in']:
 @st.cache_resource
 def load_and_validate_model():
     try:
-        # Load pre-trained models from root directory
         model = joblib.load('student_stress_model.pkl')
         le = joblib.load('label_encoder.pkl')
         feature_names = ['Study_Hours_Per_Day', 'Sleep_Hours_Per_Day', 'Lifestyle_Score', 'Academic_Pressure', 'GPA']
         
-        # Calculate Real-time accuracy using baseline dataset
         df = pd.read_csv("student_lifestyle_dataset.csv")
         df['Lifestyle_Score'] = df['Social_Hours_Per_Day'] + df['Physical_Activity_Hours_Per_Day'] + df['Extracurricular_Hours_Per_Day']
         df['Academic_Pressure'] = df['GPA'] * df['Study_Hours_Per_Day']
@@ -149,6 +139,56 @@ def load_and_validate_model():
         return None, None, 0, 0, None, []
 
 model, le, train_acc, test_acc, model_cm, feature_names = load_and_validate_model()
+
+# ==========================================
+# 3. Dual API Key & Persona System
+# ==========================================
+
+COUNSELOR_PERSONA = """
+You are an empathetic, professional, and non-judgmental University Student Wellness Counselor. Your goal is to help college students manage academic pressure, optimize their lifestyle habits, and reduce stress. 
+Core Directives:
+1. Tone: Warm, encouraging, and supportive. Use conversational language, not overly academic jargon.
+2. Data-Driven but Human: When a student's data is provided, acknowledge it gently. Do not scold them for bad habits; instead, offer constructive, bite-sized adjustments.
+3. Actionable Advice: Always provide realistic, easy-to-implement tips (e.g., 'Try the Pomodoro technique').
+4. The Medical Boundary (CRITICAL): You are an AI advisor, NOT a doctor. If a student mentions severe depression, self-harm, or overwhelming anxiety, you MUST immediately express deep care and gently direct them to seek professional campus medical or psychological help. Never attempt to diagnose.
+5. Brevity: Keep your responses concise, structured (use bullet points if listing tips), and under 150 words unless asked for details.
+"""
+
+def get_gemini_response(prompt_text):
+    key1 = st.secrets.get("GEMINI_API_KEY_1")
+    key2 = st.secrets.get("GEMINI_API_KEY_2")
+    
+    if not key1 and not key2:
+        fallback_key = st.secrets.get("GEMINI_API_KEY")
+        if fallback_key:
+            genai.configure(api_key=fallback_key)
+            return genai.GenerativeModel('gemini-1.5-flash', system_instruction=COUNSELOR_PERSONA).generate_content(prompt_text).text
+        return "AI Counselor API Keys are not properly configured."
+
+    # Strategy 1: Try Gemini 2.5 Flash
+    try:
+        if key1:
+            genai.configure(api_key=key1)
+            model_25 = genai.GenerativeModel('gemini-2.5-flash', system_instruction=COUNSELOR_PERSONA)
+            response = model_25.generate_content(prompt_text)
+            return response.text + "\n\n*(Engine: Gemini 2.5 Flash)*"
+    except Exception as e:
+        if "ResourceExhausted" in str(e) or "429" in str(e) or "quota" in str(e).lower():
+            pass
+        else:
+            return f"Error with Primary AI: {e}"
+
+    # Strategy 2: Fallback to Gemini 1.5 Flash
+    try:
+        if key2:
+            genai.configure(api_key=key2)
+            model_15 = genai.GenerativeModel('gemini-1.5-flash', system_instruction=COUNSELOR_PERSONA)
+            response = model_15.generate_content(prompt_text)
+            return response.text + "\n\n*(Engine: Gemini 1.5 Flash Fallback)*"
+    except Exception as e2:
+        return f"AI Counselor is temporarily unavailable due to high traffic. Error: {e2}"
+        
+    return "AI Counselor unavailable."
 
 # --- UI CONFIGURATION ---
 st.set_page_config(page_title="Gemini AI Counselor", layout="wide")
@@ -169,15 +209,10 @@ if st.session_state['user_role'] == "Admin":
 
 page = st.sidebar.radio("Go to", menu_options)
 
-# --- AI API SETUP ---
-api_key = st.secrets["GEMINI_API_KEY"]
-gemini_model = None
-if api_key:
-    try:
-        genai.configure(api_key=api_key)
-        gemini_model = genai.GenerativeModel('gemini-2.5-flash') 
-        st.sidebar.success("🟢 AI Connected")
-    except Exception: st.sidebar.error("🔴 AI Connection Failed")
+if st.secrets.get("GEMINI_API_KEY_1") or st.secrets.get("GEMINI_API_KEY"):
+    st.sidebar.success("🟢 AI Engines Active")
+else: 
+    st.sidebar.error("🔴 AI Connection Missing")
 
 # ==========================================
 # 4. PAGE LOGIC
@@ -185,18 +220,15 @@ if api_key:
 
 if page == "🏠 Home":
     st.title("🧠 AI Student Stress Counselor")
-    
-    # REQUIRED MEDICAL DISCLAIMER
     st.warning("""
     **⚠️ Disclaimer:** This system is an AI-powered advisory tool intended for educational purposes and stress awareness. 
     It is **NOT** a substitute for professional medical advice, clinical diagnosis, or mental health treatment. 
     If you are experiencing a mental health crisis, please contact qualified medical professionals or a campus counselor immediately.
     """)
-    
     st.markdown("""
     ### System Features:
     - **🤖 Predictive AI:** Real-time stress risk calculation based on lifestyle patterns.
-    - **💬 Generative AI:** Empathetic counseling support powered by **Google Gemini**.
+    - **💬 Generative AI:** Empathetic counseling support powered by **Google Gemini** (Dual-Engine 2.5/1.5).
     - **📜 Cloud Integration:** Secure tracking of wellness history via Supabase.
     """)
     if test_acc > 0:
@@ -214,7 +246,6 @@ elif page == "🤖 AI Predictor":
 
         def sync_v(key_from, key_to): st.session_state[key_to] = st.session_state[key_from]
 
-        # Initialize session states
         for k in ['study', 'sleep', 'social', 'phys', 'extra']:
             if f'slider_{k}' not in st.session_state: st.session_state[f'slider_{k}'] = 5.0
             if f'num_{k}' not in st.session_state: st.session_state[f'num_{k}'] = 5.0
@@ -251,10 +282,8 @@ elif page == "🤖 AI Predictor":
                     if st.session_state['user_role'] != "Guest":
                         supabase.table("user_history").insert({"student_id": st.session_state['username'], "Study_Hours_Per_Day": study, "Sleep_Hours_Per_Day": sleep, "Social_Hours_Per_Day": social, "Physical_Activity_Hours_Per_Day": phys, "Extracurricular_Hours_Per_Day": extra, "GPA": gpa, "Stress_Level": pred_label}).execute()
 
-                    ai_advice = "Counselor is thinking..."
-                    if gemini_model:
-                        p = f"Professional Counselor: Student {study}h Study, {sleep}h Sleep, {gpa} GPA. Stress: {pred_label} ({confidence:.1f}%). 1 sentence analysis + 3 tips."
-                        ai_advice = gemini_model.generate_content(p).text
+                    p = f"Student Profile: {study}h Study, {sleep}h Sleep, {gpa} GPA. ML Prediction: {pred_label} Stress ({confidence:.1f}% confidence). Please provide a brief encouraging analysis and 3 specific, actionable tips based on this data."
+                    ai_advice = get_gemini_response(p)
                     
                     st.session_state['last_pred'] = {'res': pred_label, 'conf': confidence, 'advice': ai_advice, 'inputs': {"Study_Hours_Per_Day": study, "Sleep_Hours_Per_Day": sleep, "Social_Hours_Per_Day": social, "Physical_Activity_Hours_Per_Day": phys, "Extracurricular_Hours_Per_Day": extra, "GPA": gpa, "Stress_Level": pred_label}}
 
@@ -295,12 +324,12 @@ elif page == "💬 AI Chatbot":
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"): st.markdown(prompt)
         
-        if gemini_model:
-            resp = gemini_model.generate_content(prompt).text
-            st.session_state.messages.append({"role": "assistant", "content": resp})
-            with st.chat_message("assistant"): st.markdown(resp)
-            if st.session_state['user_role'] != "Guest":
-                supabase.table("user_chat_history").insert([{"student_id": st.session_state['username'], "role": "user", "content": prompt}, {"student_id": st.session_state['username'], "role": "assistant", "content": resp}]).execute()
+        resp = get_gemini_response(prompt)
+        
+        st.session_state.messages.append({"role": "assistant", "content": resp})
+        with st.chat_message("assistant"): st.markdown(resp)
+        if st.session_state['user_role'] != "Guest":
+            supabase.table("user_chat_history").insert([{"student_id": st.session_state['username'], "role": "user", "content": prompt}, {"student_id": st.session_state['username'], "role": "assistant", "content": resp}]).execute()
 
 elif page == "📜 My History":
     st.title("📜 Prediction History")

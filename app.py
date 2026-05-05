@@ -244,7 +244,7 @@ if page == "🏠 Home":
     st.markdown("""
     ### System Features:
     - **🤖 Predictive AI:** Real-time stress risk calculation based on lifestyle patterns.
-    - **💬 Generative AI:** Empathetic counseling support powered by **Google Gemini** .
+    - **💬 Generative AI:** Empathetic counseling support powered by **Google Gemini** (Precision Dual-Engine System).
     - **📜 Cloud Integration:** Secure tracking of wellness history via Supabase.
     """)
     
@@ -397,6 +397,35 @@ elif page == "📝 User Survey":
             else:
                 supabase.table("user_feedback").insert({"student_id": st.session_state['username'], "Study_Hours_Per_Day": s_study, "Sleep_Hours_Per_Day": s_sleep, "Social_Hours_Per_Day": s_social, "Physical_Activity_Hours_Per_Day": s_phys, "Extracurricular_Hours_Per_Day": s_extra, "GPA": s_gpa, "Stress_Level": s_stress}).execute()
                 st.success("Synced to Cloud!")
+
+elif page == "⚙️ Account Settings":
+    st.title("⚙️ Account Settings")
+    st.markdown("Manage your account details and security.")
+    
+    st.write(f"**Student ID / Username:** `{st.session_state['username']}`")
+    st.write(f"**Account Role:** `{st.session_state['user_role']}`")
+    st.markdown("---")
+    
+    st.subheader("🔒 Change Password")
+    with st.form("change_password_form"):
+        old_pwd = st.text_input("Current Password", type="password")
+        new_pwd = st.text_input("New Password", type="password")
+        confirm_pwd = st.text_input("Confirm New Password", type="password")
+        
+        if st.form_submit_button("Update Password"):
+            if not old_pwd or not new_pwd:
+                st.error("Please fill in all fields.")
+            elif new_pwd != confirm_pwd:
+                st.error("New passwords do not match!")
+            else:
+                # 验证旧密码是否正确
+                res = supabase.table("users").select("password_hash").eq("student_id", st.session_state['username']).execute()
+                if res.data and check_hashes(old_pwd, res.data[0]['password_hash']):
+                    # 更新为新密码
+                    supabase.table("users").update({"password_hash": make_hashes(new_pwd)}).eq("student_id", st.session_state['username']).execute()
+                    st.success("✅ Password updated successfully!")
+                else:
+                    st.error("❌ Incorrect current password.")
 
 elif page == "📈 Data Analysis":
     if st.session_state['user_role'] != "Admin":

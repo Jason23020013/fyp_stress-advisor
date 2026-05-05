@@ -244,7 +244,7 @@ if page == "🏠 Home":
     st.markdown("""
     ### System Features:
     - **🤖 Predictive AI:** Real-time stress risk calculation based on lifestyle patterns.
-    - **💬 Generative AI:** Empathetic counseling support powered by **Google Gemini** (Precision Dual-Engine System).
+    - **💬 Generative AI:** Empathetic counseling support powered by **Google Gemini** .
     - **📜 Cloud Integration:** Secure tracking of wellness history via Supabase.
     """)
     

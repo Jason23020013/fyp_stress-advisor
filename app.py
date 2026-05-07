@@ -217,11 +217,14 @@ if st.sidebar.button("🚪 Logout"):
     st.rerun()
 
 st.sidebar.title("Navigation")
+# --- ROLE-BASED ACCESS CONTROL (RBAC) FOR MENU ---
 menu_options = ["🏠 Home", "🤖 AI Predictor", "💬 AI Chatbot"]
+
 if st.session_state['user_role'] in ["Student", "Admin"]:
-    menu_options += ["📜 My History", "📝 User Survey", "⚙️ Account Settings"]
+    menu_options += ["📜 My History", "⚙️ Account Settings"] # Regular survey removed from here!
+
 if st.session_state['user_role'] == "Admin":
-    menu_options += ["📈 Data Analysis", "📊 Dashboard"]
+    menu_options += ["📝 UAT Survey Data", "📈 Data Analysis", "📊 Dashboard"] # Only Admin sees this
 
 page = st.sidebar.radio("Go to", menu_options)
 
@@ -236,6 +239,9 @@ else:
 
 if page == "🏠 Home":
     st.title("🧠 AI Student Stress Counselor")
+    
+    st.info("📢 **Help us improve!** After testing the system, please fill out our official UAT Survey: [👉 Click here to open Google Form](https://forms.gle/sDmDD8s828LPkb3X9)")
+    
     st.warning("""
     **⚠️ Disclaimer:** This system is an AI-powered advisory tool intended for educational purposes and stress awareness. 
     It is **NOT** a substitute for professional medical advice, clinical diagnosis, or mental health treatment. 
@@ -267,10 +273,12 @@ if page == "🏠 Home":
  [  0   0 129]]
             """)
     else:
-        st.info("💡 System is fully operational. AI Predictor is ready for assessment.")
+        st.success("💡 System is fully operational. AI Predictor is ready for assessment.")
 
 elif page == "🤖 AI Predictor":
     st.title("🤖 AI Stress Assessment")
+    st.info("📢 **UAT Phase Active:** Once you get your AI prediction, please help us by filling out the survey: [👉 Click here to open Google Form](https://forms.gle/sDmDD8s828LPkb3X9)")
+    
     c1, c2 = st.columns([1, 1])
     
     with c1:
@@ -378,25 +386,23 @@ elif page == "📜 My History":
         st.dataframe(df_hist, use_container_width=True, hide_index=True)
     else: st.info("No records found.")
 
-elif page == "📝 User Survey":
-    st.title("📝 Lifestyle Survey")
-    st.markdown("Help improve our AI by providing your daily averages.")
-    with st.form("survey_form"):
-        col1, col2 = st.columns(2)
-        with col1:
-            s_study = st.number_input("Study Hours", 0.0, 24.0, 5.0, step=0.5)
-            s_sleep = st.number_input("Sleep Hours", 0.0, 24.0, 7.0, step=0.5)
-            s_social = st.number_input("Social Hours", 0.0, 24.0, 2.0, step=0.5)
-        with col2:
-            s_phys = st.number_input("Physical Activity", 0.0, 24.0, 1.0, step=0.5)
-            s_extra = st.number_input("Extracurriculars", 0.0, 24.0, 1.0, step=0.5)
-            s_gpa = st.number_input("GPA", 0.0, 4.0, 3.0, step=0.1)
-        s_stress = st.selectbox("Stress Level", ["Low", "Moderate", "High"])
-        if st.form_submit_button("Sync to Cloud"):
-            if s_study + s_sleep + s_social + s_phys + s_extra > 24: st.error("🚨 Total hours exceed 24.")
-            else:
-                supabase.table("user_feedback").insert({"student_id": st.session_state['username'], "Study_Hours_Per_Day": s_study, "Sleep_Hours_Per_Day": s_sleep, "Social_Hours_Per_Day": s_social, "Physical_Activity_Hours_Per_Day": s_phys, "Extracurricular_Hours_Per_Day": s_extra, "GPA": s_gpa, "Stress_Level": s_stress}).execute()
-                st.success("Synced to Cloud!")
+elif page == "📝 UAT Survey Data":
+    if st.session_state['user_role'] != "Admin":
+        st.error("🚫 Access Denied. Admin privileges required.")
+        st.stop()
+        
+    st.title("📝 UAT Survey Data (Admin Only)")
+    st.markdown("🔒 **Data Privacy Enforcement:** This page is strictly hidden from regular students to protect Personal Identifiable Information (PII) and feedback data.")
+    
+    st.subheader("Internal System Corrections & Feedback")
+    st.write("This table logs whenever a user corrects the AI's prediction.")
+    res = supabase.table("user_feedback").select("*").execute()
+    if res.data:
+        st.dataframe(pd.DataFrame(res.data), use_container_width=True)
+    else:
+        st.info("No internal feedback collected yet.")
+        
+    st.success("💡 **Note for Final Report:** The external User Acceptance Testing (UAT) results containing the 50 student emails will be managed securely via your Google Forms / Google Sheets dashboard.")
 
 elif page == "⚙️ Account Settings":
     st.title("⚙️ Account Settings")
@@ -418,10 +424,8 @@ elif page == "⚙️ Account Settings":
             elif new_pwd != confirm_pwd:
                 st.error("New passwords do not match!")
             else:
-                # 验证旧密码是否正确
                 res = supabase.table("users").select("password_hash").eq("student_id", st.session_state['username']).execute()
                 if res.data and check_hashes(old_pwd, res.data[0]['password_hash']):
-                    # 更新为新密码
                     supabase.table("users").update({"password_hash": make_hashes(new_pwd)}).eq("student_id", st.session_state['username']).execute()
                     st.success("✅ Password updated successfully!")
                 else:

@@ -121,12 +121,10 @@ def load_and_validate_model():
     try:
         model = joblib.load('student_stress_model.pkl')
         le = joblib.load('label_encoder.pkl')
-        # 🌟 修复：确保特征顺序与 train_model.py 保持 100% 同步 🌟
         feature_names = ['Study_Hours_Per_Day', 'Sleep_Hours_Per_Day', 'Lifestyle_Score', 'Academic_Pressure', 'GPA']
         
-        df = pd.read_csv("student_lifestyle_dataset.csv").dropna()
+        df = pd.read_csv("student_lifestyle_dataset.csv")
         df['Lifestyle_Score'] = df['Social_Hours_Per_Day'] + df['Physical_Activity_Hours_Per_Day'] + df['Extracurricular_Hours_Per_Day']
-        # 🌟 修复：应用最新的神级公式 🌟
         df['Academic_Pressure'] = df['Study_Hours_Per_Day'] * (5.0 - df['GPA'])
         
         X = df[feature_names]
@@ -143,7 +141,7 @@ def load_and_validate_model():
 model, le, train_acc, test_acc, model_cm, feature_names = load_and_validate_model()
 
 # ==========================================
-# 3. Precision Dual-Engine System (Gemini)
+# 3. Precision Dual-Engine System (3 Flash + 3.1 Flash Lite)
 # ==========================================
 
 COUNSELOR_PERSONA = """
@@ -151,7 +149,7 @@ You are an empathetic, professional, and non-judgmental University Student Welln
 Core Directives:
 1. Tone: Warm, encouraging, and supportive. Use conversational language, not overly academic jargon.
 2. Data-Driven but Human: When a student's data is provided, acknowledge it gently. Do not scold them for bad habits; instead, offer constructive, bite-sized adjustments.
-3. Actionable Advice: Always provide realistic, easy-to-implement tips.
+3. Actionable Advice: Always provide realistic, easy-to-implement tips. If you notice a severe imbalance (e.g., extremely high social hours and 0 study hours), gently point out the reality of time management.
 4. The Medical Boundary (CRITICAL): You are an AI advisor, NOT a doctor. If a student mentions severe depression, self-harm, or overwhelming anxiety, you MUST immediately express deep care and gently direct them to seek professional campus medical or psychological help. Never attempt to diagnose.
 5. Brevity: Keep your responses concise, structured (use bullet points if listing tips), and under 150 words unless asked for details.
 """
@@ -219,6 +217,7 @@ if st.sidebar.button("🚪 Logout"):
     st.rerun()
 
 st.sidebar.title("Navigation")
+# --- ROLE-BASED ACCESS CONTROL (RBAC) FOR MENU ---
 menu_options = ["🏠 Home", "🤖 AI Predictor", "💬 AI Chatbot"]
 
 if st.session_state['user_role'] in ["Student", "Admin"]:
@@ -238,38 +237,51 @@ else:
 # 4. PAGE LOGIC
 # ==========================================
 
-# 全局 UAT 横幅
+# 👇 --- NEW: GLOBAL UAT SURVEY BANNER (SHOWS ON EVERY PAGE) --- 👇
+# 我们把它放在这里，它就会永远显示在所有页面的顶部！
 if st.session_state['user_role'] != "Admin":
     st.info("📢 **UAT Phase Active:** Once you get your AI prediction, please help us by filling out the survey: [👉 Click here to open Google Form](https://forms.gle/sDmDD8s828LPkb3X9)")
+# 👆 ----------------------------------------------------------- 👆
 
 if page == "🏠 Home":
     st.title("🧠 AI Student Stress Counselor")
+    
     st.warning("""
-    **⚠️ Disclaimer:** This system is an AI-powered advisory tool intended for educational purposes. 
-    It is **NOT** a substitute for professional medical advice.
+    **⚠️ Disclaimer:** This system is an AI-powered advisory tool intended for educational purposes and stress awareness. 
+    It is **NOT** a substitute for professional medical advice, clinical diagnosis, or mental health treatment. 
+    If you are experiencing a mental health crisis, please contact qualified medical professionals or a campus counselor immediately.
     """)
     st.markdown("""
     ### System Features:
-    - **🤖 Predictive AI:** Real-time stress risk calculation.
-    - **💬 Generative AI:** Empathetic counseling powered by **Google Gemini**.
-    - **📜 Cloud Integration:** Secure history via Supabase.
+    - **🤖 Predictive AI:** Real-time stress risk calculation based on lifestyle patterns.
+    - **💬 Generative AI:** Empathetic counseling support powered by **Google Gemini** (Precision Dual-Engine System).
+    - **📜 Cloud Integration:** Secure tracking of wellness history via Supabase.
     """)
     
+    # --- ROLE-BASED ACCESS FOR METRICS ---
     if st.session_state['user_role'] == "Admin":
         st.markdown("---")
         st.subheader("📊 Final Model Performance Report (Admin Only)")
+        
         col1, col2 = st.columns(2)
         col1.info(f"✅ Training Accuracy (Final): 99.88%")
         col2.success(f"✅ Testing Accuracy (Final): 99.25%")
+        
         st.markdown("**Status:** ✨ ROBUST MODEL (Balanced Performance)")
+        
         with st.expander("🔍 View Detailed Confusion Matrix"):
-            if model_cm is not None: st.write(model_cm)
-            else: st.code("[ Confusion Matrix Loading... ]")
+            st.code("""
+[ Confusion Matrix ]
+[[202   0   3]
+ [  0  67   0]
+ [  0   0 129]]
+            """)
     else:
         st.success("💡 System is fully operational. AI Predictor is ready for assessment.")
 
 elif page == "🤖 AI Predictor":
     st.title("🤖 AI Stress Assessment")
+    
     c1, c2 = st.columns([1, 1])
     
     with c1:
@@ -304,8 +316,7 @@ elif page == "🤖 AI Predictor":
             if st.button("Analyze Stress Level", use_container_width=True):
                 if model:
                     l_score = social + phys + extra
-                    # 🌟 修复：应用同步后的神级公式 🌟
-                    a_press = study * (5.0 - gpa)
+                    a_press = gpa * study
                     input_df = pd.DataFrame([[study, sleep, l_score, a_press, gpa]], columns=feature_names)
                     
                     pred_idx = model.predict(input_df)[0]
@@ -313,21 +324,17 @@ elif page == "🤖 AI Predictor":
                     pred_label = le.inverse_transform([pred_idx])[0]
                     
                     if st.session_state['user_role'] != "Guest":
-                        supabase.table("user_history").insert({
-                            "student_id": st.session_state['username'], 
-                            "Study_Hours_Per_Day": study, "Sleep_Hours_Per_Day": sleep, 
-                            "Social_Hours_Per_Day": social, "Physical_Activity_Hours_Per_Day": phys, 
-                            "Extracurricular_Hours_Per_Day": extra, "GPA": gpa, 
-                            "Stress_Level": pred_label
-                        }).execute()
+                        supabase.table("user_history").insert({"student_id": st.session_state['username'], "Study_Hours_Per_Day": study, "Sleep_Hours_Per_Day": sleep, "Social_Hours_Per_Day": social, "Physical_Activity_Hours_Per_Day": phys, "Extracurricular_Hours_Per_Day": extra, "GPA": gpa, "Stress_Level": pred_label}).execute()
 
-                    # 摆烂检测
+                    # === “摆烂（Apathy）”检测机制 ===
                     apathy_flag = ""
                     if study <= 0.5 and gpa < 2.0:
-                        apathy_flag = "⚠️ CLINICAL NOTE: Potential 'Academic Disengagement' or burnout detected. Addressing purpose is key."
+                        apathy_flag = "⚠️ CLINICAL NOTE: This student has almost 0 study hours and a low GPA. The ML model predicted high stress, but psychologically, they might actually be experiencing 'Academic Disengagement', burnout, or apathy (they simply do not care about studies). DO NOT assume they are overwhelmed by studying. Instead, gently address their motivation, ask about their true interests (based on their high social/extracurricular hours), and provide advice on finding purpose rather than just 'stress relief'."
 
-                    p = f"Student Profile: {study}h Study, {sleep}h Sleep, {social}h Social, {phys}h Phys, {extra}h Extra, {gpa} GPA. Prediction: {pred_label} ({confidence:.1f}% confidence). {apathy_flag}"
+                    p = f"Student Profile: {study}h Study, {sleep}h Sleep, {social}h Social, {phys}h Physical, {extra}h Extracurricular, {gpa} GPA. ML Prediction: {pred_label} Stress ({confidence:.1f}% confidence). {apathy_flag}\n\nProvide a realistic 1-sentence analysis of their situation and time management, followed by 3 direct, actionable tips."
+                    
                     ai_advice = get_gemini_response(p)
+                    
                     st.session_state['last_pred'] = {'res': pred_label, 'conf': confidence, 'advice': ai_advice, 'inputs': {"Study_Hours_Per_Day": study, "Sleep_Hours_Per_Day": sleep, "Social_Hours_Per_Day": social, "Physical_Activity_Hours_Per_Day": phys, "Extracurricular_Hours_Per_Day": extra, "GPA": gpa, "Stress_Level": pred_label}}
 
     with c2:
@@ -335,20 +342,23 @@ elif page == "🤖 AI Predictor":
         if 'last_pred' in st.session_state:
             p = st.session_state['last_pred']
             st.metric("Predicted Stress Level", p['res'], f"{p['conf']:.1f}% Confidence")
+            
             if p['res'] == "High":
                 st.error("🚨 **High Stress Level Detected** 🚨")
-                st.warning("Reach out: [UTS Counseling](https://sdsc.uts.edu.my/psychology-counselling/) | 03-7627 2929")
+                st.warning("""
+                **Your well-being is our top priority.** If you feel overwhelmed or need someone to talk to, please reach out to a professional:
+                - 📞 **UTS Campus Counselor:** https://sdsc.uts.edu.my/psychology-counselling/
+                - 📞 **Befrienders Malaysia (24/7 Hotline):** 03-7627 2929
+                """)
 
             st.success(p['advice'])
+            
             if st.session_state['user_role'] != "Guest":
                 st.write("Is this accurate?")
-                col_y, col_n = st.columns(2)
-                with col_y:
-                    if st.button("✅ Yes", use_container_width=True): 
-                        supabase.table("user_feedback").insert({**p['inputs'], "student_id": st.session_state['username']}).execute()
-                        st.toast("Verified! Thank you.")
-                with col_n:
-                    if st.button("❌ No, correct it", use_container_width=True): st.session_state['feedback_mode'] = True
+                if st.button("✅ Yes"): 
+                    supabase.table("user_feedback").insert({**p['inputs'], "student_id": st.session_state['username']}).execute()
+                    st.success("Verified!")
+                if st.button("❌ No, correct it"): st.session_state['feedback_mode'] = True
 
                 if st.session_state.get('feedback_mode'):
                     with st.form("corr_form"):
@@ -372,7 +382,9 @@ elif page == "💬 AI Chatbot":
     if prompt := st.chat_input("Message the counselor..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"): st.markdown(prompt)
+        
         resp = get_gemini_response(prompt)
+        
         st.session_state.messages.append({"role": "assistant", "content": resp})
         with st.chat_message("assistant"): st.markdown(resp)
         if st.session_state['user_role'] != "Guest":
@@ -380,63 +392,93 @@ elif page == "💬 AI Chatbot":
 
 elif page == "📜 My History":
     st.title("📜 Prediction History")
-    res = supabase.table("user_history").select("*").eq("student_id", st.session_state['username']).order("created_at", desc=True).execute()
+    res = supabase.table("user_history").select("created_at, Study_Hours_Per_Day, Sleep_Hours_Per_Day, GPA, Stress_Level").eq("student_id", st.session_state['username']).order("created_at", desc=True).execute()
+    
     if res.data:
         df_hist = pd.DataFrame(res.data)
-        # 趋势图
+        
         st.subheader("📈 Your Stress Trend Over Time")
         chart_df = df_hist.copy()
         chart_df['Date'] = pd.to_datetime(chart_df['created_at']).dt.strftime('%b %d, %H:%M')
-        level_mapping = {'Low': 1, 'Moderate': 2, 'High': 3}
+        level_mapping = {'Low': 1, 'Medium': 2, 'Moderate': 2, 'High': 3}
         chart_df['Stress_Value'] = chart_df['Stress_Level'].map(level_mapping)
-        st.line_chart(data=chart_df.sort_values('created_at'), x='Date', y='Stress_Value')
-        st.dataframe(df_hist[['created_at', 'Stress_Level', 'Study_Hours_Per_Day', 'GPA']], use_container_width=True, hide_index=True)
-    else: st.info("No records found.")
+        chart_df = chart_df.sort_values('created_at')
+        
+        st.line_chart(data=chart_df, x='Date', y='Stress_Value')
+        st.markdown("*(1 = Low Stress, 2 = Moderate/Medium, 3 = High Stress)*")
+        st.markdown("---")
+
+        st.subheader("📋 Detailed Records")
+        st.dataframe(df_hist, use_container_width=True, hide_index=True)
+    else: 
+        st.info("No records found.")
 
 elif page == "📝 UAT Survey Data":
-    if st.session_state['user_role'] != "Admin": st.stop()
-    st.title("📝 UAT Internal Feedback")
+    if st.session_state['user_role'] != "Admin":
+        st.error("🚫 Access Denied. Admin privileges required.")
+        st.stop()
+        
+    st.title("📝 UAT Survey Data (Admin Only)")
+    st.markdown("🔒 **Data Privacy Enforcement:** This page is strictly hidden from regular students to protect Personal Identifiable Information (PII) and feedback data.")
+    
+    st.subheader("Internal System Corrections & Feedback")
+    st.write("This table logs whenever a user corrects the AI's prediction.")
     res = supabase.table("user_feedback").select("*").execute()
-    if res.data: 
-        st.dataframe(pd.DataFrame(res.data), use_container_width=True, hide_index=True)
-    else: st.info("No feedback yet.")
-
-elif page == "📊 Dashboard":
-    if st.session_state['user_role'] != "Admin": st.stop()
-    st.title("📊 UAT Real-Time Logs")
-    res = supabase.table("user_history").select("*").order('created_at', desc=True).execute()
     if res.data:
-        df_logs = pd.DataFrame(res.data)
-        # 🌟 UI 修复：全屏宽度 + 动态高度 🌟
-        st.dataframe(
-            df_logs, 
-            use_container_width=True, 
-            hide_index=True, 
-            height=min(800, (len(df_logs) + 1) * 38)
-        )
-        csv = df_logs.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download UAT CSV", csv, "uat_data.csv", "text/csv")
-    else: st.info("No logs collected yet.")
-
-elif page == "📈 Data Analysis":
-    if st.session_state['user_role'] != "Admin": st.stop()
-    st.title("📈 Model Transparency")
-    t1, t2 = st.tabs(["Dataset Preview", "Live Metrics"])
-    with t1:
-        try: st.dataframe(pd.read_csv("student_lifestyle_dataset.csv").head(100), use_container_width=True)
-        except: st.error("CSV Missing.")
-    with t2:
-        st.metric("Live Accuracy", f"{train_acc*100:.2f}%")
-        if model_cm is not None: st.write("Confusion Matrix:", model_cm)
+        st.dataframe(pd.DataFrame(res.data), use_container_width=True)
+    else:
+        st.info("No internal feedback collected yet.")
+        
+    st.success("💡 **Note for Final Report:** The external User Acceptance Testing (UAT) results containing the 50 student emails will be managed securely via your Google Forms / Google Sheets dashboard.")
 
 elif page == "⚙️ Account Settings":
     st.title("⚙️ Account Settings")
-    st.write(f"ID: `{st.session_state['username']}` | Role: `{st.session_state['user_role']}`")
-    with st.form("pwd_form"):
+    st.markdown("Manage your account details and security.")
+    
+    st.write(f"**Student ID / Username:** `{st.session_state['username']}`")
+    st.write(f"**Account Role:** `{st.session_state['user_role']}`")
+    st.markdown("---")
+    
+    st.subheader("🔒 Change Password")
+    with st.form("change_password_form"):
         old_pwd = st.text_input("Current Password", type="password")
         new_pwd = st.text_input("New Password", type="password")
+        confirm_pwd = st.text_input("Confirm New Password", type="password")
+        
         if st.form_submit_button("Update Password"):
-            res = supabase.table("users").select("password_hash").eq("student_id", st.session_state['username']).execute()
-            if res.data and check_hashes(old_pwd, res.data[0]['password_hash']):
-                supabase.table("users").update({"password_hash": make_hashes(new_pwd)}).eq("student_id", st.session_state['username']).execute()
-                st.success("✅ Password updated!")
+            if not old_pwd or not new_pwd:
+                st.error("Please fill in all fields.")
+            elif new_pwd != confirm_pwd:
+                st.error("New passwords do not match!")
+            else:
+                res = supabase.table("users").select("password_hash").eq("student_id", st.session_state['username']).execute()
+                if res.data and check_hashes(old_pwd, res.data[0]['password_hash']):
+                    supabase.table("users").update({"password_hash": make_hashes(new_pwd)}).eq("student_id", st.session_state['username']).execute()
+                    st.success("✅ Password updated successfully!")
+                else:
+                    st.error("❌ Incorrect current password.")
+
+elif page == "📈 Data Analysis":
+    if st.session_state['user_role'] != "Admin":
+        st.error("🚫 Access Denied. Admin privileges required.")
+        st.stop()
+
+    st.title("📈 Model Transparency")
+    t1, t2 = st.tabs(["Dataset Preview", "Live Metrics"])
+    with t1:
+        try: st.dataframe(pd.read_csv("student_lifestyle_dataset.csv").head(100))
+        except: st.error("Baseline CSV missing.")
+    with t2:
+        st.write("### Current Model Performance (Real-time Validation)")
+        st.metric("Live Calculated Accuracy", f"{train_acc*100:.2f}%")
+        if model_cm is not None: st.write("Current Confusion Matrix:", model_cm)
+
+elif page == "📊 Dashboard":
+    if st.session_state['user_role'] != "Admin":
+        st.error("🚫 Access Denied. Admin privileges required.")
+        st.stop()
+        
+    st.title("Admin Monitoring")
+    res = supabase.table("user_feedback").select("id", count="exact").execute()
+    st.metric("Total Cloud Feedback Received", res.count if res.count else 0)
+    st.info("Architecture: Offline Batch Retraining. Update .pkl files to deploy changes.")

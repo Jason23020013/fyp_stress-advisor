@@ -347,7 +347,7 @@ elif page == "🤖 AI Predictor":
                 st.error("🚨 **High Stress Level Detected** 🚨")
                 st.warning("""
                 **Your well-being is our top priority.** If you feel overwhelmed or need someone to talk to, please reach out to a professional:
-                - 📞 **UTS Campus Counselor:** counselor@uts.edu.my
+                - 📞 **UTS Campus Counselor:** https://sdsc.uts.edu.my/psychology-counselling/
                 - 📞 **Befrienders Malaysia (24/7 Hotline):** 03-7627 2929
                 """)
 

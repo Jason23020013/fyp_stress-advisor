@@ -221,10 +221,10 @@ st.sidebar.title("Navigation")
 menu_options = ["🏠 Home", "🤖 AI Predictor", "💬 AI Chatbot"]
 
 if st.session_state['user_role'] in ["Student", "Admin"]:
-    menu_options += ["📜 My History", "⚙️ Account Settings"] # Regular survey removed from here!
+    menu_options += ["📜 My History", "⚙️ Account Settings"]
 
 if st.session_state['user_role'] == "Admin":
-    menu_options += ["📝 UAT Survey Data", "📈 Data Analysis", "📊 Dashboard"] # Only Admin sees this
+    menu_options += ["📝 UAT Survey Data", "📈 Data Analysis", "📊 Dashboard"]
 
 page = st.sidebar.radio("Go to", menu_options)
 
@@ -339,6 +339,17 @@ elif page == "🤖 AI Predictor":
         if 'last_pred' in st.session_state:
             p = st.session_state['last_pred']
             st.metric("Predicted Stress Level", p['res'], f"{p['conf']:.1f}% Confidence")
+            
+            # 👇 --- NEW FEATURE ADDED 1: SAFETY NET HOTLINE --- 👇
+            if p['res'] == "High":
+                st.error("🚨 **High Stress Level Detected** 🚨")
+                st.warning("""
+                **Your well-being is our top priority.** If you feel overwhelmed or need someone to talk to, please reach out to a professional:
+                - 📞 **UTS Campus Counselor:** counselor@uts.edu.my
+                - 📞 **Befrienders Malaysia (24/7 Hotline):** 03-7627 2929
+                """)
+            # 👆 ------------------------------------------------ 👆
+
             st.success(p['advice'])
             
             if st.session_state['user_role'] != "Guest":
@@ -381,10 +392,33 @@ elif page == "💬 AI Chatbot":
 elif page == "📜 My History":
     st.title("📜 Prediction History")
     res = supabase.table("user_history").select("created_at, Study_Hours_Per_Day, Sleep_Hours_Per_Day, GPA, Stress_Level").eq("student_id", st.session_state['username']).order("created_at", desc=True).execute()
+    
     if res.data:
         df_hist = pd.DataFrame(res.data)
+        
+        # 👇 --- NEW FEATURE ADDED 2: LINE CHART TRENDS --- 👇
+        st.subheader("📈 Your Stress Trend Over Time")
+        
+        # Format the dataframe for charting without breaking the original table
+        chart_df = df_hist.copy()
+        chart_df['Date'] = pd.to_datetime(chart_df['created_at']).dt.strftime('%b %d, %H:%M')
+        
+        # Map textual stress levels to numerical values for plotting
+        level_mapping = {'Low': 1, 'Medium': 2, 'Moderate': 2, 'High': 3}
+        chart_df['Stress_Value'] = chart_df['Stress_Level'].map(level_mapping)
+        
+        # Sort values ascending so the chart flows naturally from left (past) to right (present)
+        chart_df = chart_df.sort_values('created_at')
+        
+        st.line_chart(data=chart_df, x='Date', y='Stress_Value')
+        st.markdown("*(1 = Low Stress, 2 = Moderate/Medium, 3 = High Stress)*")
+        st.markdown("---")
+        # 👆 ------------------------------------------------ 👆
+
+        st.subheader("📋 Detailed Records")
         st.dataframe(df_hist, use_container_width=True, hide_index=True)
-    else: st.info("No records found.")
+    else: 
+        st.info("No records found.")
 
 elif page == "📝 UAT Survey Data":
     if st.session_state['user_role'] != "Admin":

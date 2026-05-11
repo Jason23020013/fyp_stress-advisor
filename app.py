@@ -237,10 +237,14 @@ else:
 # 4. PAGE LOGIC
 # ==========================================
 
+# 👇 --- NEW: GLOBAL UAT SURVEY BANNER (SHOWS ON EVERY PAGE) --- 👇
+# 我们把它放在这里，它就会永远显示在所有页面的顶部！
+if st.session_state['user_role'] != "Admin":
+    st.info("📢 **UAT Phase Active:** Once you get your AI prediction, please help us by filling out the survey: [👉 Click here to open Google Form](https://forms.gle/sDmDD8s828LPkb3X9)")
+# 👆 ----------------------------------------------------------- 👆
+
 if page == "🏠 Home":
     st.title("🧠 AI Student Stress Counselor")
-    
-    st.info("📢 **Help us improve!** After testing the system, please fill out our official UAT Survey: [👉 Click here to open Google Form](https://forms.gle/sDmDD8s828LPkb3X9)")
     
     st.warning("""
     **⚠️ Disclaimer:** This system is an AI-powered advisory tool intended for educational purposes and stress awareness. 
@@ -277,7 +281,6 @@ if page == "🏠 Home":
 
 elif page == "🤖 AI Predictor":
     st.title("🤖 AI Stress Assessment")
-    st.info("📢 **UAT Phase Active:** Once you get your AI prediction, please help us by filling out the survey: [👉 Click here to open Google Form](https://forms.gle/sDmDD8s828LPkb3X9)")
     
     c1, c2 = st.columns([1, 1])
     
@@ -340,7 +343,6 @@ elif page == "🤖 AI Predictor":
             p = st.session_state['last_pred']
             st.metric("Predicted Stress Level", p['res'], f"{p['conf']:.1f}% Confidence")
             
-            # 👇 --- NEW FEATURE ADDED 1: SAFETY NET HOTLINE --- 👇
             if p['res'] == "High":
                 st.error("🚨 **High Stress Level Detected** 🚨")
                 st.warning("""
@@ -348,7 +350,6 @@ elif page == "🤖 AI Predictor":
                 - 📞 **UTS Campus Counselor:** counselor@uts.edu.my
                 - 📞 **Befrienders Malaysia (24/7 Hotline):** 03-7627 2929
                 """)
-            # 👆 ------------------------------------------------ 👆
 
             st.success(p['advice'])
             
@@ -396,24 +397,16 @@ elif page == "📜 My History":
     if res.data:
         df_hist = pd.DataFrame(res.data)
         
-        # 👇 --- NEW FEATURE ADDED 2: LINE CHART TRENDS --- 👇
         st.subheader("📈 Your Stress Trend Over Time")
-        
-        # Format the dataframe for charting without breaking the original table
         chart_df = df_hist.copy()
         chart_df['Date'] = pd.to_datetime(chart_df['created_at']).dt.strftime('%b %d, %H:%M')
-        
-        # Map textual stress levels to numerical values for plotting
         level_mapping = {'Low': 1, 'Medium': 2, 'Moderate': 2, 'High': 3}
         chart_df['Stress_Value'] = chart_df['Stress_Level'].map(level_mapping)
-        
-        # Sort values ascending so the chart flows naturally from left (past) to right (present)
         chart_df = chart_df.sort_values('created_at')
         
         st.line_chart(data=chart_df, x='Date', y='Stress_Value')
         st.markdown("*(1 = Low Stress, 2 = Moderate/Medium, 3 = High Stress)*")
         st.markdown("---")
-        # 👆 ------------------------------------------------ 👆
 
         st.subheader("📋 Detailed Records")
         st.dataframe(df_hist, use_container_width=True, hide_index=True)

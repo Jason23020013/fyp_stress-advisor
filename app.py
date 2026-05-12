@@ -123,11 +123,8 @@ def load_and_validate_model():
         le = joblib.load('label_encoder.pkl')
         feature_names = ['Study_Hours_Per_Day', 'Sleep_Hours_Per_Day', 'Lifestyle_Score', 'Academic_Pressure', 'GPA']
         
-        # 🌟 修复：加上 dropna() 防止空值崩溃 🌟
         df = pd.read_csv("student_lifestyle_dataset.csv").dropna()
         df['Lifestyle_Score'] = df['Social_Hours_Per_Day'] + df['Physical_Activity_Hours_Per_Day'] + df['Extracurricular_Hours_Per_Day']
-        
-        # 🌟 修复：神级公式，正确逻辑 (GPA 越高压力越小) 🌟
         df['Academic_Pressure'] = df['Study_Hours_Per_Day'] * (5.0 - df['GPA'])
         
         X = df[feature_names]
@@ -259,7 +256,6 @@ if page == "🏠 Home":
     - **📜 Cloud Integration:** Secure tracking of wellness history via Supabase.
     """)
     
-    # --- ROLE-BASED ACCESS FOR METRICS ---
     if st.session_state['user_role'] == "Admin":
         st.markdown("---")
         st.subheader("📊 Final Model Performance Report (Admin Only)")
@@ -291,14 +287,20 @@ elif page == "🤖 AI Predictor":
 
         def sync_v(key_from, key_to): st.session_state[key_to] = st.session_state[key_from]
 
+        # Initialize session states for standard habits
         for k in ['study', 'sleep', 'social', 'phys', 'extra']:
             if f'slider_{k}' not in st.session_state: st.session_state[f'slider_{k}'] = 5.0
             if f'num_{k}' not in st.session_state: st.session_state[f'num_{k}'] = 5.0
 
-        def input_row(label, key_base):
+        # 🌟 Initialize session state for GPA 🌟
+        if 'slider_gpa' not in st.session_state: st.session_state['slider_gpa'] = 3.00
+        if 'num_gpa' not in st.session_state: st.session_state['num_gpa'] = 3.00
+
+        # 🌟 Enhanced input_row function to support dynamic limits and step sizing 🌟
+        def input_row(label, key_base, min_v=0.0, max_v=24.0, step_v=0.5):
             col_s, col_n = st.columns([3, 1])
-            with col_s: val = st.slider(label, 0.0, 24.0, key=f"slider_{key_base}", step=0.5, on_change=sync_v, args=(f"slider_{key_base}", f"num_{key_base}"))
-            with col_n: st.number_input(label, 0.0, 24.0, key=f"num_{key_base}", step=0.5, on_change=sync_v, args=(f"num_{key_base}", f"slider_{key_base}"), label_visibility="hidden")
+            with col_s: val = st.slider(label, min_v, max_v, key=f"slider_{key_base}", step=step_v, on_change=sync_v, args=(f"slider_{key_base}", f"num_{key_base}"))
+            with col_n: st.number_input(label, min_v, max_v, key=f"num_{key_base}", step=step_v, on_change=sync_v, args=(f"num_{key_base}", f"slider_{key_base}"), label_visibility="hidden")
             return val
 
         study = input_row("Study Hours (per day)", "study")
@@ -310,15 +312,15 @@ elif page == "🤖 AI Predictor":
         total = study + sleep + social + phys + extra
         st.markdown(f"**Used: {total}/24 Hours**")
         st.progress(min(total/24.0, 1.0))
-        gpa = st.slider("Current GPA", 0.0, 4.0, 3.0, step=0.1)
+        
+        # 🌟 Replaced static GPA slider with the new dynamic input_row 🌟
+        gpa = input_row("Current GPA", "gpa", 0.00, 4.00, 0.01)
         
         if total > 24: st.error("🚨 Total hours cannot exceed 24.")
         else:
             if st.button("Analyze Stress Level", use_container_width=True):
                 if model:
                     l_score = social + phys + extra
-                    
-                    # 🌟 修复：应用正确的预测公式 🌟
                     a_press = study * (5.0 - gpa)
                     
                     input_df = pd.DataFrame([[study, sleep, l_score, a_press, gpa]], columns=feature_names)
@@ -416,7 +418,6 @@ elif page == "📜 My History":
         st.markdown("---")
 
         st.subheader("📋 Detailed Records")
-        # 🌟 修复：确保历史记录表格自适应屏幕宽度 🌟
         st.dataframe(df_hist, use_container_width=True, hide_index=True)
     else: 
         st.info("No records found.")
@@ -499,7 +500,6 @@ elif page == "📊 Dashboard":
     if res_logs.data:
         df_logs = pd.DataFrame(res_logs.data)
         
-        # 🌟 修复：完整的数据表展示与下载功能，宽屏自适应 🌟
         st.dataframe(
             df_logs,
             use_container_width=True,

@@ -123,8 +123,11 @@ def load_and_validate_model():
         le = joblib.load('label_encoder.pkl')
         feature_names = ['Study_Hours_Per_Day', 'Sleep_Hours_Per_Day', 'Lifestyle_Score', 'Academic_Pressure', 'GPA']
         
-        df = pd.read_csv("student_lifestyle_dataset.csv")
+        # 🌟 修复：加上 dropna() 防止空值崩溃 🌟
+        df = pd.read_csv("student_lifestyle_dataset.csv").dropna()
         df['Lifestyle_Score'] = df['Social_Hours_Per_Day'] + df['Physical_Activity_Hours_Per_Day'] + df['Extracurricular_Hours_Per_Day']
+        
+        # 🌟 修复：神级公式，正确逻辑 (GPA 越高压力越小) 🌟
         df['Academic_Pressure'] = df['Study_Hours_Per_Day'] * (5.0 - df['GPA'])
         
         X = df[feature_names]
@@ -237,11 +240,9 @@ else:
 # 4. PAGE LOGIC
 # ==========================================
 
-# 👇 --- NEW: GLOBAL UAT SURVEY BANNER (SHOWS ON EVERY PAGE) --- 👇
-# 我们把它放在这里，它就会永远显示在所有页面的顶部！
+# 👇 --- GLOBAL UAT SURVEY BANNER --- 👇
 if st.session_state['user_role'] != "Admin":
     st.info("📢 **UAT Phase Active:** Once you get your AI prediction, please help us by filling out the survey: [👉 Click here to open Google Form](https://forms.gle/sDmDD8s828LPkb3X9)")
-# 👆 ----------------------------------------------------------- 👆
 
 if page == "🏠 Home":
     st.title("🧠 AI Student Stress Counselor")
@@ -316,7 +317,10 @@ elif page == "🤖 AI Predictor":
             if st.button("Analyze Stress Level", use_container_width=True):
                 if model:
                     l_score = social + phys + extra
-                    a_press = gpa * study
+                    
+                    # 🌟 修复：应用正确的预测公式 🌟
+                    a_press = study * (5.0 - gpa)
+                    
                     input_df = pd.DataFrame([[study, sleep, l_score, a_press, gpa]], columns=feature_names)
                     
                     pred_idx = model.predict(input_df)[0]
@@ -355,10 +359,13 @@ elif page == "🤖 AI Predictor":
             
             if st.session_state['user_role'] != "Guest":
                 st.write("Is this accurate?")
-                if st.button("✅ Yes"): 
-                    supabase.table("user_feedback").insert({**p['inputs'], "student_id": st.session_state['username']}).execute()
-                    st.success("Verified!")
-                if st.button("❌ No, correct it"): st.session_state['feedback_mode'] = True
+                col_y, col_n = st.columns(2)
+                with col_y:
+                    if st.button("✅ Yes", use_container_width=True): 
+                        supabase.table("user_feedback").insert({**p['inputs'], "student_id": st.session_state['username']}).execute()
+                        st.success("Verified!")
+                with col_n:
+                    if st.button("❌ No, correct it", use_container_width=True): st.session_state['feedback_mode'] = True
 
                 if st.session_state.get('feedback_mode'):
                     with st.form("corr_form"):
@@ -409,6 +416,7 @@ elif page == "📜 My History":
         st.markdown("---")
 
         st.subheader("📋 Detailed Records")
+        # 🌟 修复：确保历史记录表格自适应屏幕宽度 🌟
         st.dataframe(df_hist, use_container_width=True, hide_index=True)
     else: 
         st.info("No records found.")
@@ -478,7 +486,34 @@ elif page == "📊 Dashboard":
         st.error("🚫 Access Denied. Admin privileges required.")
         st.stop()
         
-    st.title("Admin Monitoring")
-    res = supabase.table("user_feedback").select("id", count="exact").execute()
-    st.metric("Total Cloud Feedback Received", res.count if res.count else 0)
+    st.title("📊 UAT Real-Time Logs & Admin Monitoring")
+    
+    res_fb = supabase.table("user_feedback").select("id", count="exact").execute()
+    st.metric("Total Cloud Feedback Received", res_fb.count if res_fb.count else 0)
     st.info("Architecture: Offline Batch Retraining. Update .pkl files to deploy changes.")
+    
+    st.markdown("---")
+    st.subheader("📋 Live Student Sessions")
+    
+    res_logs = supabase.table("user_history").select("*").order('created_at', desc=True).execute()
+    if res_logs.data:
+        df_logs = pd.DataFrame(res_logs.data)
+        
+        # 🌟 修复：完整的数据表展示与下载功能，宽屏自适应 🌟
+        st.dataframe(
+            df_logs,
+            use_container_width=True,
+            hide_index=True,
+            height=min(800, (len(df_logs) + 1) * 38)
+        )
+        
+        csv = df_logs.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            "📥 Download UAT Log Data (CSV)",
+            csv,
+            "uat_realtime_logs.csv",
+            "text/csv",
+            key='download-uat-csv'
+        )
+    else:
+        st.info("No logs collected yet. Waiting for participants...")

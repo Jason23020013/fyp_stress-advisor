@@ -292,11 +292,10 @@ elif page == "🤖 AI Predictor":
             if f'slider_{k}' not in st.session_state: st.session_state[f'slider_{k}'] = 5.0
             if f'num_{k}' not in st.session_state: st.session_state[f'num_{k}'] = 5.0
 
-        # 🌟 Initialize session state for GPA 🌟
+        # Initialize session state for GPA
         if 'slider_gpa' not in st.session_state: st.session_state['slider_gpa'] = 3.00
         if 'num_gpa' not in st.session_state: st.session_state['num_gpa'] = 3.00
 
-        # 🌟 Enhanced input_row function to support dynamic limits and step sizing 🌟
         def input_row(label, key_base, min_v=0.0, max_v=24.0, step_v=0.5):
             col_s, col_n = st.columns([3, 1])
             with col_s: val = st.slider(label, min_v, max_v, key=f"slider_{key_base}", step=step_v, on_change=sync_v, args=(f"slider_{key_base}", f"num_{key_base}"))
@@ -313,35 +312,36 @@ elif page == "🤖 AI Predictor":
         st.markdown(f"**Used: {total}/24 Hours**")
         st.progress(min(total/24.0, 1.0))
         
-        # 🌟 Replaced static GPA slider with the new dynamic input_row 🌟
         gpa = input_row("Current GPA", "gpa", 0.00, 4.00, 0.01)
         
         if total > 24: st.error("🚨 Total hours cannot exceed 24.")
         else:
             if st.button("Analyze Stress Level", use_container_width=True):
-                if model:
-                    l_score = social + phys + extra
-                    a_press = study * (5.0 - gpa)
-                    
-                    input_df = pd.DataFrame([[study, sleep, l_score, a_press, gpa]], columns=feature_names)
-                    
-                    pred_idx = model.predict(input_df)[0]
-                    confidence = np.max(model.predict_proba(input_df)[0]) * 100
-                    pred_label = le.inverse_transform([pred_idx])[0]
-                    
-                    if st.session_state['user_role'] != "Guest":
-                        supabase.table("user_history").insert({"student_id": st.session_state['username'], "Study_Hours_Per_Day": study, "Sleep_Hours_Per_Day": sleep, "Social_Hours_Per_Day": social, "Physical_Activity_Hours_Per_Day": phys, "Extracurricular_Hours_Per_Day": extra, "GPA": gpa, "Stress_Level": pred_label}).execute()
+                # 🚀 STRATEGY 1: Adding the loading spinner here 🚀
+                with st.spinner("⏳ AI is analyzing your data & generating advice... (Takes ~3 seconds)"):
+                    if model:
+                        l_score = social + phys + extra
+                        a_press = study * (5.0 - gpa)
+                        
+                        input_df = pd.DataFrame([[study, sleep, l_score, a_press, gpa]], columns=feature_names)
+                        
+                        pred_idx = model.predict(input_df)[0]
+                        confidence = np.max(model.predict_proba(input_df)[0]) * 100
+                        pred_label = le.inverse_transform([pred_idx])[0]
+                        
+                        if st.session_state['user_role'] != "Guest":
+                            supabase.table("user_history").insert({"student_id": st.session_state['username'], "Study_Hours_Per_Day": study, "Sleep_Hours_Per_Day": sleep, "Social_Hours_Per_Day": social, "Physical_Activity_Hours_Per_Day": phys, "Extracurricular_Hours_Per_Day": extra, "GPA": gpa, "Stress_Level": pred_label}).execute()
 
-                    # === “摆烂（Apathy）”检测机制 ===
-                    apathy_flag = ""
-                    if study <= 0.5 and gpa < 2.0:
-                        apathy_flag = "⚠️ CLINICAL NOTE: This student has almost 0 study hours and a low GPA. The ML model predicted high stress, but psychologically, they might actually be experiencing 'Academic Disengagement', burnout, or apathy (they simply do not care about studies). DO NOT assume they are overwhelmed by studying. Instead, gently address their motivation, ask about their true interests (based on their high social/extracurricular hours), and provide advice on finding purpose rather than just 'stress relief'."
+                        # === “摆烂（Apathy）”检测机制 ===
+                        apathy_flag = ""
+                        if study <= 0.5 and gpa < 2.0:
+                            apathy_flag = "⚠️ CLINICAL NOTE: This student has almost 0 study hours and a low GPA. The ML model predicted high stress, but psychologically, they might actually be experiencing 'Academic Disengagement', burnout, or apathy (they simply do not care about studies). DO NOT assume they are overwhelmed by studying. Instead, gently address their motivation, ask about their true interests (based on their high social/extracurricular hours), and provide advice on finding purpose rather than just 'stress relief'."
 
-                    p = f"Student Profile: {study}h Study, {sleep}h Sleep, {social}h Social, {phys}h Physical, {extra}h Extracurricular, {gpa} GPA. ML Prediction: {pred_label} Stress ({confidence:.1f}% confidence). {apathy_flag}\n\nProvide a realistic 1-sentence analysis of their situation and time management, followed by 3 direct, actionable tips."
-                    
-                    ai_advice = get_gemini_response(p)
-                    
-                    st.session_state['last_pred'] = {'res': pred_label, 'conf': confidence, 'advice': ai_advice, 'inputs': {"Study_Hours_Per_Day": study, "Sleep_Hours_Per_Day": sleep, "Social_Hours_Per_Day": social, "Physical_Activity_Hours_Per_Day": phys, "Extracurricular_Hours_Per_Day": extra, "GPA": gpa, "Stress_Level": pred_label}}
+                        p = f"Student Profile: {study}h Study, {sleep}h Sleep, {social}h Social, {phys}h Physical, {extra}h Extracurricular, {gpa} GPA. ML Prediction: {pred_label} Stress ({confidence:.1f}% confidence). {apathy_flag}\n\nProvide a realistic 1-sentence analysis of their situation and time management, followed by 3 direct, actionable tips."
+                        
+                        ai_advice = get_gemini_response(p)
+                        
+                        st.session_state['last_pred'] = {'res': pred_label, 'conf': confidence, 'advice': ai_advice, 'inputs': {"Study_Hours_Per_Day": study, "Sleep_Hours_Per_Day": sleep, "Social_Hours_Per_Day": social, "Physical_Activity_Hours_Per_Day": phys, "Extracurricular_Hours_Per_Day": extra, "GPA": gpa, "Stress_Level": pred_label}}
 
     with c2:
         st.subheader("Analysis Result")

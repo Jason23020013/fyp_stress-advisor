@@ -251,8 +251,8 @@ if page == "🏠 Home":
     st.title("🧠 AI Student Stress Counselor")
     
     st.warning("""
-    **⚠️ Disclaimer:** This system is an AI-powered advisory tool intended for educational purposes and stress awareness.
-    It is **NOT** a substitute for professional medical advice, clinical diagnosis, or mental health treatment.
+    **⚠️ Disclaimer:** This system is an AI-powered advisory tool intended for educational purposes and stress awareness. 
+    It is **NOT** a substitute for professional medical advice, clinical diagnosis, or mental health treatment. 
     If you are experiencing a mental health crisis, please contact qualified medical professionals or a campus counselor immediately.
     """)
     st.markdown("""
@@ -285,9 +285,11 @@ if page == "🏠 Home":
     # --- HOMEPAGE MOBILE BUTTON FIX ---
     st.markdown("---")
     st.markdown("### 🚀 Ready to test your stress levels?")
-    if st.button("🤖 Launch AI Predictor Now", type="primary", use_container_width=True):
+    
+    def switch_to_predictor():
         st.session_state['current_page'] = "🤖 AI Predictor"
-        st.rerun()
+
+    st.button("🤖 Launch AI Predictor Now", type="primary", use_container_width=True, on_click=switch_to_predictor)
     st.info("📱 **Mobile Tip:** You can also navigate using the `>` arrow icon in the top-left corner of your screen.")
 
 elif page == "🤖 AI Predictor":

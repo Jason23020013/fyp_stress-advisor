@@ -74,6 +74,7 @@ if not st.session_state['logged_in']:
                 st.session_state['username'] = l_user
                 st.session_state['user_role'] = res.data[0].get('role', 'Student')
                 st.query_params["user"] = l_user 
+                st.session_state['current_page'] = "🤖 AI Predictor" # AUTO REDIRECT FIX
                 st.success(f"Welcome, {l_user}!")
                 time.sleep(1)
                 st.rerun()
@@ -109,6 +110,7 @@ if not st.session_state['logged_in']:
         st.session_state['logged_in'] = True
         st.session_state['username'] = "Guest User"
         st.session_state['user_role'] = "Guest"
+        st.session_state['current_page'] = "🤖 AI Predictor" # AUTO REDIRECT FIX
         st.rerun()
     st.stop()
 
@@ -226,7 +228,11 @@ if st.session_state['user_role'] in ["Student", "Admin"]:
 if st.session_state['user_role'] == "Admin":
     menu_options += ["📝 UAT Survey Data", "📈 Data Analysis", "📊 Dashboard"]
 
-page = st.sidebar.radio("Go to", menu_options)
+# --- NAVIGATION FIX: Bind radio to session state ---
+if 'current_page' not in st.session_state or st.session_state['current_page'] not in menu_options:
+    st.session_state['current_page'] = menu_options[0]
+
+page = st.sidebar.radio("Go to", menu_options, key="current_page")
 
 if st.secrets.get("GEMINI_API_KEY_1") or st.secrets.get("GEMINI_API_KEY"):
     st.sidebar.success("🟢 AI Engines Active")
@@ -245,8 +251,8 @@ if page == "🏠 Home":
     st.title("🧠 AI Student Stress Counselor")
     
     st.warning("""
-    **⚠️ Disclaimer:** This system is an AI-powered advisory tool intended for educational purposes and stress awareness. 
-    It is **NOT** a substitute for professional medical advice, clinical diagnosis, or mental health treatment. 
+    **⚠️ Disclaimer:** This system is an AI-powered advisory tool intended for educational purposes and stress awareness.
+    It is **NOT** a substitute for professional medical advice, clinical diagnosis, or mental health treatment.
     If you are experiencing a mental health crisis, please contact qualified medical professionals or a campus counselor immediately.
     """)
     st.markdown("""
@@ -275,6 +281,14 @@ if page == "🏠 Home":
             """)
     else:
         st.success("💡 System is fully operational. AI Predictor is ready for assessment.")
+        
+    # --- HOMEPAGE MOBILE BUTTON FIX ---
+    st.markdown("---")
+    st.markdown("### 🚀 Ready to test your stress levels?")
+    if st.button("🤖 Launch AI Predictor Now", type="primary", use_container_width=True):
+        st.session_state['current_page'] = "🤖 AI Predictor"
+        st.rerun()
+    st.info("📱 **Mobile Tip:** You can also navigate using the `>` arrow icon in the top-left corner of your screen.")
 
 elif page == "🤖 AI Predictor":
     st.title("🤖 AI Stress Assessment")

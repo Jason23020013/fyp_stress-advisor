@@ -416,13 +416,27 @@ elif page == "💬 AI Chatbot":
             supabase.table("user_chat_history").insert([{"student_id": st.session_state['username'], "role": "user", "content": prompt}, {"student_id": st.session_state['username'], "role": "assistant", "content": resp}]).execute()
 
 elif page == "📜 My History":
-    st.title("📜 Prediction History")
-    res = supabase.table("user_history").select("created_at, Study_Hours_Per_Day, Sleep_Hours_Per_Day, GPA, Stress_Level").eq("student_id", st.session_state['username']).order("created_at", desc=True).execute()
+    st.title("📊 Personal Analytical Report")
+    st.markdown("Track your lifestyle habits and analyze your stress results over time.")
+    
+    # Fetch data including all habits so we can analyze them
+    res = supabase.table("user_history").select("created_at, Study_Hours_Per_Day, Sleep_Hours_Per_Day, Social_Hours_Per_Day, Physical_Activity_Hours_Per_Day, Extracurricular_Hours_Per_Day, GPA, Stress_Level").eq("student_id", st.session_state['username']).order("created_at", desc=True).execute()
     
     if res.data:
         df_hist = pd.DataFrame(res.data)
         
-        st.subheader("📈 Your Stress Trend Over Time")
+        # --- NEW FEATURE: Analytical Habit Insights ---
+        st.subheader("💡 Your Habit Insights (All-Time Averages)")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Avg Study Hours", f"{df_hist['Study_Hours_Per_Day'].mean():.1f}h")
+        c2.metric("Avg Sleep Hours", f"{df_hist['Sleep_Hours_Per_Day'].mean():.1f}h")
+        c3.metric("Avg Social Hours", f"{df_hist['Social_Hours_Per_Day'].mean():.1f}h")
+        c4.metric("Avg GPA Tracked", f"{df_hist['GPA'].mean():.2f}")
+        
+        st.markdown("---")
+        
+        # --- Stress Trend Chart ---
+        st.subheader("📈 Stress Trend Analysis")
         chart_df = df_hist.copy()
         chart_df['Date'] = pd.to_datetime(chart_df['created_at']).dt.strftime('%b %d, %H:%M')
         level_mapping = {'Low': 1, 'Medium': 2, 'Moderate': 2, 'High': 3}
@@ -433,10 +447,21 @@ elif page == "📜 My History":
         st.markdown("*(1 = Low Stress, 2 = Moderate/Medium, 3 = High Stress)*")
         st.markdown("---")
 
-        st.subheader("📋 Detailed Records")
+        # --- Detailed Report & Export ---
+        st.subheader("📋 Detailed Habit Logs")
         st.dataframe(df_hist, use_container_width=True, hide_index=True)
+        
+        # NEW FEATURE: Allow student to download their analytical report
+        csv_user = df_hist.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            "📥 Download Analytical Report (CSV)",
+            csv_user,
+            "my_analytical_report.csv",
+            "text/csv",
+            key='download-user-csv'
+        )
     else: 
-        st.info("No records found.")
+        st.info("No records found. Take an AI Assessment to generate your analytical report.")
 
 elif page == "📝 UAT Survey Data":
     if st.session_state['user_role'] != "Admin":

@@ -146,53 +146,63 @@ def load_and_validate_model():
 
 model, le, train_acc, test_acc, model_cm, feature_names = load_and_validate_model()
 
-# --- NEW FEATURE: PDF Generation Function ---
+# --- NEW FEATURE: PDF Generation Function (Updated for ALL data in Landscape) ---
 def generate_pdf_report(dataframe):
-    pdf = FPDF()
+    # 1. 重点：将 PDF 设置为横向 (Landscape) 以容纳 8 个数据列
+    pdf = FPDF(orientation='L')
     pdf.add_page()
     
     # PDF Title
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(200, 10, txt="AI Stress Assessment - Personal History Report", ln=True, align='C')
+    pdf.cell(277, 10, txt="AI Stress Assessment - Personal History Report", ln=True, align='C')
     pdf.ln(5)
     
     # Subtitle / User Info
     pdf.set_font("Arial", 'I', 12)
-    pdf.cell(200, 10, txt=f"Student ID: {st.session_state['username']}", ln=True, align='C')
+    pdf.cell(277, 10, txt=f"Student ID: {st.session_state['username']}", ln=True, align='C')
     pdf.ln(10)
     
-    # Body Content
-    pdf.set_font("Arial", size=10)
-    
-    # Add table headers
-    pdf.set_font("Arial", 'B', 10)
-    pdf.cell(50, 10, "Date", border=1, align='C')
-    pdf.cell(30, 10, "Stress", border=1, align='C')
-    pdf.cell(30, 10, "Study (h)", border=1, align='C')
-    pdf.cell(30, 10, "Sleep (h)", border=1, align='C')
+    # Add table headers (调整了列宽，总宽度适配横向 A4 纸)
+    pdf.set_font("Arial", 'B', 9)
+    pdf.cell(45, 10, "Date", border=1, align='C')
+    pdf.cell(30, 10, "Stress Level", border=1, align='C')
+    pdf.cell(25, 10, "Study (h)", border=1, align='C')
+    pdf.cell(25, 10, "Sleep (h)", border=1, align='C')
+    pdf.cell(25, 10, "Social (h)", border=1, align='C')
+    pdf.cell(25, 10, "Phys (h)", border=1, align='C')
+    pdf.cell(25, 10, "Extra (h)", border=1, align='C')
     pdf.cell(20, 10, "GPA", border=1, align='C')
     pdf.ln()
     
     # Reset font for rows
-    pdf.set_font("Arial", size=10)
+    pdf.set_font("Arial", size=9)
     
     for index, row in dataframe.iterrows():
         # Parse and format the date
         raw_date = pd.to_datetime(row.get('created_at', ''))
         fmt_date = raw_date.strftime('%Y-%m-%d %H:%M') if not pd.isnull(raw_date) else 'N/A'
         
+        # 抓取所有数据
         stress = str(row.get('Stress_Level', 'N/A'))
         study = str(row.get('Study_Hours_Per_Day', '-'))
         sleep = str(row.get('Sleep_Hours_Per_Day', '-'))
+        social = str(row.get('Social_Hours_Per_Day', '-'))
+        phys = str(row.get('Physical_Activity_Hours_Per_Day', '-'))
+        extra = str(row.get('Extracurricular_Hours_Per_Day', '-'))
         gpa = str(row.get('GPA', '-'))
         
-        pdf.cell(50, 10, fmt_date, border=1, align='C')
+        # 写入 PDF 表格
+        pdf.cell(45, 10, fmt_date, border=1, align='C')
         pdf.cell(30, 10, stress, border=1, align='C')
-        pdf.cell(30, 10, study, border=1, align='C')
-        pdf.cell(30, 10, sleep, border=1, align='C')
+        pdf.cell(25, 10, study, border=1, align='C')
+        pdf.cell(25, 10, sleep, border=1, align='C')
+        pdf.cell(25, 10, social, border=1, align='C')
+        pdf.cell(25, 10, phys, border=1, align='C')
+        pdf.cell(25, 10, extra, border=1, align='C')
         pdf.cell(20, 10, gpa, border=1, align='C')
         pdf.ln()
 
+    # 导出字节流
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         pdf.output(tmp.name)
         with open(tmp.name, "rb") as f:

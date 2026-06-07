@@ -28,13 +28,20 @@ def make_hashes(password):
 def check_hashes(password, hashed_text):
     return make_hashes(password) == hashed_text
 
-try:
-    SUPABASE_URL = st.secrets["SUPABASE_URL"]
-    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
-    st.error("❌ Failed to connect to the Supabase Cloud Database. Please check your Streamlit Secrets.")
-    st.stop()
+# --- PERFORMANCE OPTIMIZATION 1: Cache Database Connection ---
+# 避免每次点击都在后台重新连接数据库，极大提升网页响应速度
+@st.cache_resource
+def init_supabase_connection():
+    try:
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+        return create_client(url, key)
+    except Exception as e:
+        st.error("❌ Failed to connect to the Supabase Cloud Database. Please check your Streamlit Secrets.")
+        st.stop()
+
+supabase = init_supabase_connection()
+# -------------------------------------------------------------
 
 # --- AUTO-LOGIN HACK (Persistence on Refresh) ---
 if "user" in st.query_params:
@@ -144,7 +151,8 @@ def load_and_validate_model():
         st.error(f"🚨 Configuration Error: Ensure .pkl and .csv files are in the root directory. Error: {e}")
         return None, None, 0, 0, None, []
 
-model, le, train_acc, test_acc, model_cm, feature_names = load_and_validate_model()
+# PERFORMANCE OPTIMIZATION 2: Removed global model loading from here.
+# It will now only load on the specific pages that need it.
 
 # --- NEW FEATURE: PDF Generation Function (Updated for ALL data in Landscape) ---
 def generate_pdf_report(dataframe):
@@ -360,6 +368,11 @@ if page == "🏠 Home":
 
 elif page == "🤖 AI Predictor":
     st.title("🤖 AI Stress Assessment")
+    
+    # --- PERFORMANCE OPTIMIZATION 2: Lazy Loading ML Model ---
+    # 只有进入这个预测页面，系统才会去加载和计算机器学习模型，避免首页卡顿
+    model, le, train_acc, test_acc, model_cm, feature_names = load_and_validate_model()
+    # ---------------------------------------------------------
     
     c1, c2 = st.columns([1, 1])
     
@@ -591,6 +604,11 @@ elif page == "📈 Data Analysis":
     if st.session_state['user_role'] != "Admin":
         st.error("🚫 Access Denied. Admin privileges required.")
         st.stop()
+
+    # --- PERFORMANCE OPTIMIZATION 2: Lazy Loading ML Model ---
+    # Admin 需要看指标，所以在这个页面按需加载
+    model, le, train_acc, test_acc, model_cm, feature_names = load_and_validate_model()
+    # ---------------------------------------------------------
 
     st.title("📈 Model Transparency")
     t1, t2 = st.tabs(["Dataset Preview", "Live Metrics"])

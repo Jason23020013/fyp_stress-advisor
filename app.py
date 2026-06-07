@@ -6,12 +6,16 @@ import time
 import hashlib
 from sklearn.metrics import accuracy_score, confusion_matrix
 
+# --- NEW FEATURE: PDF Generation Libraries ---
+from fpdf import FPDF
+import tempfile
+
 # --- 1. Core Library Imports & Checks ---
 try:
     from supabase import create_client, Client
     import google.generativeai as genai
 except ImportError as e:
-    st.error(f"🚨 Missing required libraries: {e}. Please ensure your requirements.txt includes supabase and google-generativeai>=0.5.2.")
+    st.error(f"🚨 Missing required libraries: {e}. Please ensure your requirements.txt includes supabase, google-generativeai>=0.5.2, and fpdf.")
     st.stop()
 
 # ==========================================
@@ -141,6 +145,58 @@ def load_and_validate_model():
         return None, None, 0, 0, None, []
 
 model, le, train_acc, test_acc, model_cm, feature_names = load_and_validate_model()
+
+# --- NEW FEATURE: PDF Generation Function ---
+def generate_pdf_report(dataframe):
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # PDF Title
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(200, 10, txt="AI Stress Assessment - Personal History Report", ln=True, align='C')
+    pdf.ln(5)
+    
+    # Subtitle / User Info
+    pdf.set_font("Arial", 'I', 12)
+    pdf.cell(200, 10, txt=f"Student ID: {st.session_state['username']}", ln=True, align='C')
+    pdf.ln(10)
+    
+    # Body Content
+    pdf.set_font("Arial", size=10)
+    
+    # Add table headers
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(50, 10, "Date", border=1, align='C')
+    pdf.cell(30, 10, "Stress", border=1, align='C')
+    pdf.cell(30, 10, "Study (h)", border=1, align='C')
+    pdf.cell(30, 10, "Sleep (h)", border=1, align='C')
+    pdf.cell(20, 10, "GPA", border=1, align='C')
+    pdf.ln()
+    
+    # Reset font for rows
+    pdf.set_font("Arial", size=10)
+    
+    for index, row in dataframe.iterrows():
+        # Parse and format the date
+        raw_date = pd.to_datetime(row.get('created_at', ''))
+        fmt_date = raw_date.strftime('%Y-%m-%d %H:%M') if not pd.isnull(raw_date) else 'N/A'
+        
+        stress = str(row.get('Stress_Level', 'N/A'))
+        study = str(row.get('Study_Hours_Per_Day', '-'))
+        sleep = str(row.get('Sleep_Hours_Per_Day', '-'))
+        gpa = str(row.get('GPA', '-'))
+        
+        pdf.cell(50, 10, fmt_date, border=1, align='C')
+        pdf.cell(30, 10, stress, border=1, align='C')
+        pdf.cell(30, 10, study, border=1, align='C')
+        pdf.cell(30, 10, sleep, border=1, align='C')
+        pdf.cell(20, 10, gpa, border=1, align='C')
+        pdf.ln()
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        pdf.output(tmp.name)
+        with open(tmp.name, "rb") as f:
+            return f.read()
 
 # ==========================================
 # 3. Precision Dual-Engine System (3 Flash + 3.1 Flash Lite)
@@ -451,15 +507,28 @@ elif page == "📜 My History":
         st.subheader("📋 Detailed Habit Logs")
         st.dataframe(df_hist, use_container_width=True, hide_index=True)
         
-        # NEW FEATURE: Allow student to download their analytical report
-        csv_user = df_hist.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            "📥 Download Analytical Report (CSV)",
-            csv_user,
-            "my_analytical_report.csv",
-            "text/csv",
-            key='download-user-csv'
-        )
+        # --- NEW FEATURE: Side-by-side Export Buttons (CSV and PDF) ---
+        col_csv, col_pdf = st.columns(2)
+        
+        with col_csv:
+            csv_user = df_hist.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                "📥 Download Analytical Report (CSV)",
+                csv_user,
+                "my_analytical_report.csv",
+                "text/csv",
+                key='download-user-csv'
+            )
+            
+        with col_pdf:
+            pdf_bytes = generate_pdf_report(df_hist)
+            st.download_button(
+                label="📄 Download Analytical Report (PDF)",
+                data=pdf_bytes,
+                file_name="my_analytical_report.pdf",
+                mime="application/pdf",
+                key='download-user-pdf'
+            )
     else: 
         st.info("No records found. Take an AI Assessment to generate your analytical report.")
 

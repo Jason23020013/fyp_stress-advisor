@@ -43,21 +43,7 @@ def init_supabase_connection():
 supabase = init_supabase_connection()
 # -------------------------------------------------------------
 
-# --- AUTO-LOGIN HACK (Persistence on Refresh) ---
-if "user" in st.query_params:
-    auto_user = st.query_params["user"]
-    if auto_user and not st.session_state.get('logged_in', False):
-        st.session_state['logged_in'] = True
-        st.session_state['username'] = auto_user
-        try:
-            role_res = supabase.table("users").select("role").eq("student_id", auto_user).execute()
-            if role_res.data:
-                st.session_state['user_role'] = role_res.data[0].get('role', 'Student')
-            else:
-                st.session_state['user_role'] = "Student"
-        except Exception:
-            st.session_state['user_role'] = "Student"
-
+# Authentication requires the login form; URL parameters are not identity proof.
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if 'username' not in st.session_state: st.session_state['username'] = ""
 if 'user_role' not in st.session_state: st.session_state['user_role'] = "Guest"
@@ -84,7 +70,7 @@ if not st.session_state['logged_in']:
                 st.session_state['logged_in'] = True
                 st.session_state['username'] = l_user
                 st.session_state['user_role'] = res.data[0].get('role', 'Student')
-                st.query_params["user"] = l_user 
+                # Do not store identity as a login credential in the URL.
                 st.session_state['current_page'] = "🤖 AI Predictor" # AUTO REDIRECT FIX
                 st.success(f"Welcome, {l_user}!")
                 time.sleep(1)
@@ -146,7 +132,7 @@ def load_and_validate_model():
         live_acc = accuracy_score(y_true, y_pred)
         cm = confusion_matrix(y_true, y_pred)
         
-        return model, le, live_acc, live_acc * 0.96, cm, feature_names
+        return model, le, live_acc, None, cm, feature_names
     except Exception as e:
         st.error(f"🚨 Configuration Error: Ensure .pkl and .csv files are in the root directory. Error: {e}")
         return None, None, 0, 0, None, []
@@ -383,9 +369,11 @@ elif page == "🤖 AI Predictor":
         def sync_v(key_from, key_to): st.session_state[key_to] = st.session_state[key_from]
 
         # Initialize session states for standard habits
-        for k in ['study', 'sleep', 'social', 'phys', 'extra']:
-            if f'slider_{k}' not in st.session_state: st.session_state[f'slider_{k}'] = 5.0
-            if f'num_{k}' not in st.session_state: st.session_state[f'num_{k}'] = 5.0
+        example_hours = {'study': 6.0, 'sleep': 8.0, 'social': 2.0, 'phys': 1.0, 'extra': 1.0}
+        st.caption('Starting values are examples. Change them to reflect your own daily routine.')
+        for k, default_hours in example_hours.items():
+            if f'slider_{k}' not in st.session_state: st.session_state[f'slider_{k}'] = default_hours
+            if f'num_{k}' not in st.session_state: st.session_state[f'num_{k}'] = default_hours
 
         # Initialize session state for GPA
         if 'slider_gpa' not in st.session_state: st.session_state['slider_gpa'] = 3.00
@@ -616,8 +604,9 @@ elif page == "📈 Data Analysis":
         try: st.dataframe(pd.read_csv("student_lifestyle_dataset.csv").head(100))
         except: st.error("Baseline CSV missing.")
     with t2:
-        st.write("### Current Model Performance (Real-time Validation)")
-        st.metric("Live Calculated Accuracy", f"{train_acc*100:.2f}%")
+        st.write("### Agreement with the reference CSV")
+        st.caption("This CSV may include training examples. This score does not measure performance on unseen students.")
+        st.metric("Reference CSV agreement (not test accuracy)", f"{train_acc*100:.2f}%")
         if model_cm is not None: st.write("Current Confusion Matrix:", model_cm)
 
 elif page == "📊 Dashboard":
